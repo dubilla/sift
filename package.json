@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx db/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
@@ -20,6 +21,7 @@
     "googleapis": "^166.0.0",
     "next": "^14.2.0",
     "next-auth": "^5.0.0-beta.30",
+    "postgres": "^3.4.7",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
@@ -33,6 +35,7 @@
     "eslint-config-next": "^14.2.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.4.0"
   }
 }
