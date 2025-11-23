@@ -79,6 +79,71 @@ export async function getUnarchivedEmails(
   }
 }
 
+export async function getFullEmail(accessToken: string, emailId: string) {
+  try {
+    const gmail = await getGmailClient(accessToken);
+
+    const emailData = await gmail.users.messages.get({
+      userId: "me",
+      id: emailId,
+      format: "full",
+    });
+
+    const headers = emailData.data.payload?.headers || [];
+    const getHeader = (name: string) =>
+      headers.find((h) => h.name === name)?.value || "";
+
+    // Extract email body (HTML or plain text)
+    const getBody = (payload: any): { html: string; text: string } => {
+      let html = "";
+      let text = "";
+
+      if (payload.parts) {
+        // Multipart email
+        for (const part of payload.parts) {
+          if (part.mimeType === "text/html" && part.body?.data) {
+            html = Buffer.from(part.body.data, "base64").toString("utf-8");
+          } else if (part.mimeType === "text/plain" && part.body?.data) {
+            text = Buffer.from(part.body.data, "base64").toString("utf-8");
+          } else if (part.parts) {
+            // Nested parts (e.g., multipart/alternative)
+            const nested = getBody(part);
+            if (!html) html = nested.html;
+            if (!text) text = nested.text;
+          }
+        }
+      } else if (payload.body?.data) {
+        // Single part email
+        const body = Buffer.from(payload.body.data, "base64").toString("utf-8");
+        if (payload.mimeType === "text/html") {
+          html = body;
+        } else {
+          text = body;
+        }
+      }
+
+      return { html, text };
+    };
+
+    const { html, text } = getBody(emailData.data.payload);
+
+    return {
+      id: emailData.data.id!,
+      threadId: emailData.data.threadId!,
+      subject: getHeader("Subject"),
+      from: getHeader("From"),
+      to: getHeader("To"),
+      date: new Date(parseInt(emailData.data.internalDate || "0")),
+      snippet: emailData.data.snippet || "",
+      bodyHtml: html,
+      bodyText: text,
+    };
+  } catch (error) {
+    console.error("Error fetching full email:", error);
+    throw error;
+  }
+}
+
 export async function archiveEmail(accessToken: string, emailId: string) {
   try {
     const gmail = await getGmailClient(accessToken);
