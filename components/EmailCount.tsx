@@ -26,7 +26,7 @@ export default function EmailCount() {
     fetchCount();
 
     const handleEmailArchived = () => {
-      setCount((prev) => (prev !== null ? Math.max(0, prev - 1) : null));
+      fetchCount();
     };
 
     window.addEventListener("emailArchived", handleEmailArchived);
