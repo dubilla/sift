@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatEmailDate, parseFromHeader } from "@/lib/utils/email";
 
 interface Email {
   id: string;
@@ -48,33 +49,6 @@ export default function EmailList() {
     initialize();
   }, []);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-      });
-    } else if (diffInHours < 168) {
-      return date.toLocaleDateString("en-US", { weekday: "short" });
-    } else {
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-    }
-  };
-
-  const parseFromHeader = (from: string) => {
-    const match = from.match(/^(.+?)\s*<(.+)>$/);
-    if (match) {
-      return { name: match[1].replace(/"/g, "").trim(), email: match[2] };
-    }
-    return { name: from, email: from };
-  };
 
   if (loading || syncing) {
     return (
@@ -145,7 +119,7 @@ export default function EmailList() {
                       {sender.name}
                     </span>
                     <span className="text-xs text-gray-500 flex-shrink-0">
-                      {formatDate(email.date)}
+                      {formatEmailDate(email.date)}
                     </span>
                   </div>
                   <h3 className="text-sm font-medium text-gray-900 mb-1 truncate">
