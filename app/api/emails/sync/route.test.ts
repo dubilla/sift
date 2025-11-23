@@ -40,7 +40,7 @@ describe("POST /api/emails/sync", () => {
   });
 
   it("returns 401 when user is not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null);
+    vi.mocked(auth).mockResolvedValue(null as any);
 
     const response = await POST();
     const data = await response.json();

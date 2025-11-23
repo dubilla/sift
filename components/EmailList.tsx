@@ -16,6 +16,36 @@ export default function EmailList() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [archivingIds, setArchivingIds] = useState<Set<string>>(new Set());
+
+  const handleArchive = async (emailId: string) => {
+    setArchivingIds((prev) => new Set(prev).add(emailId));
+
+    const originalEmails = [...emails];
+    setEmails((prev) => prev.filter((e) => e.id !== emailId));
+
+    try {
+      const response = await fetch(`/api/emails/${emailId}/archive`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to archive email");
+      }
+
+      window.dispatchEvent(new CustomEvent("emailArchived"));
+    } catch (err) {
+      setEmails(originalEmails);
+      setError(err instanceof Error ? err.message : "Failed to archive email");
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setArchivingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(emailId);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     async function initialize() {
@@ -107,10 +137,11 @@ export default function EmailList() {
       <div className="divide-y divide-gray-200">
         {emails.map((email) => {
           const sender = parseFromHeader(email.from);
+          const isArchiving = archivingIds.has(email.id);
           return (
             <div
               key={email.id}
-              className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+              className="p-4 hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -129,6 +160,26 @@ export default function EmailList() {
                     {email.snippet}
                   </p>
                 </div>
+                <button
+                  onClick={() => handleArchive(email.id)}
+                  disabled={isArchiving}
+                  className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Archive email"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                    />
+                  </svg>
+                </button>
               </div>
             </div>
           );

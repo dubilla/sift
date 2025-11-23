@@ -7,23 +7,33 @@ export default function EmailCount() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchCount() {
-      try {
-        const response = await fetch("/api/emails/count");
-        if (!response.ok) {
-          throw new Error("Failed to fetch email count");
-        }
-        const data = await response.json();
-        setCount(data.count);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred");
-      } finally {
-        setLoading(false);
+  const fetchCount = async () => {
+    try {
+      const response = await fetch("/api/emails/count");
+      if (!response.ok) {
+        throw new Error("Failed to fetch email count");
       }
+      const data = await response.json();
+      setCount(data.count);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
     fetchCount();
+
+    const handleEmailArchived = () => {
+      setCount((prev) => (prev !== null ? Math.max(0, prev - 1) : null));
+    };
+
+    window.addEventListener("emailArchived", handleEmailArchived);
+
+    return () => {
+      window.removeEventListener("emailArchived", handleEmailArchived);
+    };
   }, []);
 
   if (loading) {

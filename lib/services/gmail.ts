@@ -78,3 +78,22 @@ export async function getUnarchivedEmails(
     throw error;
   }
 }
+
+export async function archiveEmail(accessToken: string, emailId: string) {
+  try {
+    const gmail = await getGmailClient(accessToken);
+
+    await gmail.users.messages.modify({
+      userId: "me",
+      id: emailId,
+      requestBody: {
+        removeLabelIds: ["INBOX"],
+      },
+    });
+
+    return true;
+  } catch (error) {
+    console.error("Error archiving email:", error);
+    throw error;
+  }
+}
