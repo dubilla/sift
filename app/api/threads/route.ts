@@ -13,34 +13,35 @@ export async function GET() {
     }
 
     // Query to get threads with latest message metadata and message count
+    // Using FIRST_VALUE window function would be better, but keeping subqueries for compatibility
     const threads = await db
       .select({
         threadId: emails.threadId,
         subject: sql<string>`(
-          SELECT ${emails.subject}
-          FROM ${emails} e2
-          WHERE e2.thread_id = ${emails.threadId}
-            AND e2.user_id = ${session.user.id}
+          SELECT e2.subject
+          FROM emails e2
+          WHERE e2.thread_id = emails.thread_id
+            AND e2.user_id = emails.user_id
             AND e2.archived_at IS NULL
             AND e2.deleted_at IS NULL
           ORDER BY e2.date DESC
           LIMIT 1
         )`,
         from: sql<string>`(
-          SELECT ${emails.from}
-          FROM ${emails} e2
-          WHERE e2.thread_id = ${emails.threadId}
-            AND e2.user_id = ${session.user.id}
+          SELECT e2."from"
+          FROM emails e2
+          WHERE e2.thread_id = emails.thread_id
+            AND e2.user_id = emails.user_id
             AND e2.archived_at IS NULL
             AND e2.deleted_at IS NULL
           ORDER BY e2.date DESC
           LIMIT 1
         )`,
         snippet: sql<string>`(
-          SELECT ${emails.snippet}
-          FROM ${emails} e2
-          WHERE e2.thread_id = ${emails.threadId}
-            AND e2.user_id = ${session.user.id}
+          SELECT e2.snippet
+          FROM emails e2
+          WHERE e2.thread_id = emails.thread_id
+            AND e2.user_id = emails.user_id
             AND e2.archived_at IS NULL
             AND e2.deleted_at IS NULL
           ORDER BY e2.date DESC
@@ -57,7 +58,7 @@ export async function GET() {
           isNull(emails.deletedAt)
         )
       )
-      .groupBy(emails.threadId)
+      .groupBy(emails.threadId, emails.userId)
       .orderBy(desc(sql`MAX(${emails.date})`))
       .limit(100);
 
