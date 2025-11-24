@@ -16,7 +16,16 @@ export async function GET() {
     const threads = await db
       .select({
         threadId: emails.threadId,
-        subject: sql<string>`MAX(${emails.subject})`,
+        subject: sql<string>`(
+          SELECT ${emails.subject}
+          FROM ${emails} e2
+          WHERE e2.thread_id = ${emails.threadId}
+            AND e2.user_id = ${session.user.id}
+            AND e2.archived_at IS NULL
+            AND e2.deleted_at IS NULL
+          ORDER BY e2.date DESC
+          LIMIT 1
+        )`,
         from: sql<string>`(
           SELECT ${emails.from}
           FROM ${emails} e2
