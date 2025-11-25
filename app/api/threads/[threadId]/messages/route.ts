@@ -1,9 +1,10 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { emails, accounts } from "@/db/schema";
+import { emails } from "@/db/schema";
 import { and, eq, isNull, asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getFullEmail } from "@/lib/services/gmail";
+import { getValidAccessToken } from "@/lib/services/token";
 
 export async function GET(
   request: Request,
@@ -18,18 +19,18 @@ export async function GET(
 
     const { threadId } = params;
 
-    // Get email IDs for this thread from database
+    // Get email IDs for this thread from database (including archived messages)
     const threadEmails = await db
       .select({
         id: emails.id,
         date: emails.date,
+        archivedAt: emails.archivedAt,
       })
       .from(emails)
       .where(
         and(
           eq(emails.threadId, threadId),
           eq(emails.userId, session.user.id),
-          isNull(emails.archivedAt),
           isNull(emails.deletedAt)
         )
       )
@@ -42,27 +43,17 @@ export async function GET(
       );
     }
 
-    // Get user's access token
-    const userAccounts = await db
-      .select()
-      .from(accounts)
-      .where(eq(accounts.userId, session.user.id))
-      .limit(1);
-
-    if (!userAccounts.length || !userAccounts[0].access_token) {
-      return NextResponse.json(
-        { error: "No access token found" },
-        { status: 400 }
-      );
-    }
-
-    const accessToken = userAccounts[0].access_token;
+    // Get user's valid access token (refreshes if expired)
+    const accessToken = await getValidAccessToken(session.user.id);
 
     // Fetch full email bodies from Gmail API
     const messages = await Promise.all(
       threadEmails.map(async (email) => {
         const fullEmail = await getFullEmail(accessToken, email.id);
-        return fullEmail;
+        return {
+          ...fullEmail,
+          archivedAt: email.archivedAt,
+        };
       })
     );
 

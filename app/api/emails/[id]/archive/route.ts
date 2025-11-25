@@ -1,9 +1,10 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { accounts, emails, userStats, activityLog } from "@/db/schema";
+import { emails, activityLog } from "@/db/schema";
 import { archiveEmail } from "@/lib/services/gmail";
 import { eq, and, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { getValidAccessToken } from "@/lib/services/token";
 
 export async function POST(
   request: Request,
@@ -37,20 +38,10 @@ export async function POST(
       );
     }
 
-    const userAccounts = await db
-      .select()
-      .from(accounts)
-      .where(eq(accounts.userId, session.user.id))
-      .limit(1);
+    // Get valid access token (refreshes if expired)
+    const accessToken = await getValidAccessToken(session.user.id);
 
-    if (!userAccounts.length || !userAccounts[0].access_token) {
-      return NextResponse.json(
-        { error: "No access token found" },
-        { status: 400 }
-      );
-    }
-
-    await archiveEmail(userAccounts[0].access_token, emailId);
+    await archiveEmail(accessToken, emailId);
 
     await db
       .update(emails)
@@ -65,23 +56,6 @@ export async function POST(
         action: "archive",
         emailId: emailId,
       });
-
-    const stats = await db
-      .select()
-      .from(userStats)
-      .where(eq(userStats.userId, session.user.id))
-      .limit(1);
-
-    if (stats.length) {
-      const newCount = Math.max(0, (stats[0].totalUnarchived || 0) - 1);
-      await db
-        .update(userStats)
-        .set({
-          totalUnarchived: newCount,
-          updatedAt: new Date(),
-        })
-        .where(eq(userStats.userId, session.user.id));
-    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
