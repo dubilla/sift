@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { formatEmailDate, parseFromHeader } from "@/lib/utils/email";
 import EmailMessage from "./EmailMessage";
+import { useBackgroundSync } from "@/lib/hooks/useBackgroundSync";
+import { SyncProgress } from "./SyncProgress";
 
 interface Thread {
   threadId: string;
@@ -23,6 +25,7 @@ interface EmailMessageData {
   snippet: string;
   bodyHtml: string;
   bodyText: string;
+  archivedAt?: Date | null;
 }
 
 export default function EmailList() {
@@ -34,6 +37,17 @@ export default function EmailList() {
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const [threadMessages, setThreadMessages] = useState<Record<string, EmailMessageData[]>>({});
   const [loadingThreads, setLoadingThreads] = useState<Set<string>>(new Set());
+
+  const { syncState, startSync } = useBackgroundSync();
+  const wasSyncing = useRef(false);
+
+  const fetchThreads = async () => {
+    const response = await fetch("/api/threads");
+    const data = await response.json();
+    if (data.threads) {
+      setThreads(data.threads);
+    }
+  };
 
   const handleArchiveThread = async (threadId: string) => {
     setArchivingIds((prev) => new Set(prev).add(threadId));
@@ -158,12 +172,13 @@ export default function EmailList() {
         if (data.threads && data.threads.length > 0) {
           setThreads(data.threads);
           setLoading(false);
+          startSync();
         } else {
           setSyncing(true);
           const syncResponse = await fetch("/api/emails/sync", {
             method: "POST",
           });
-          await syncResponse.json();
+          const syncData = await syncResponse.json();
 
           const threadsResponse = await fetch("/api/threads");
           const threadsData = await threadsResponse.json();
@@ -173,6 +188,10 @@ export default function EmailList() {
           }
           setSyncing(false);
           setLoading(false);
+
+          if (syncData.nextPageToken) {
+            startSync();
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred");
@@ -182,7 +201,18 @@ export default function EmailList() {
     }
 
     initialize();
-  }, []);
+  }, [startSync]);
+
+  // Auto-refresh threads when background sync completes
+  useEffect(() => {
+    if (syncState.isSyncing) {
+      wasSyncing.current = true;
+    } else if (wasSyncing.current && !syncState.isSyncing) {
+      // Sync just completed
+      wasSyncing.current = false;
+      fetchThreads();
+    }
+  }, [syncState.isSyncing]);
 
 
   if (loading || syncing) {
@@ -238,9 +268,15 @@ export default function EmailList() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      <div className="divide-y divide-gray-200">
-        {threads.map((thread) => {
+    <>
+      <SyncProgress
+        currentCount={syncState.currentCount}
+        totalCount={syncState.totalCount}
+        isSyncing={syncState.isSyncing}
+      />
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="divide-y divide-gray-200">
+          {threads.map((thread) => {
           const sender = parseFromHeader(thread.from);
           const isArchiving = archivingIds.has(thread.threadId);
           const isExpanded = expandedThreads.has(thread.threadId);
@@ -341,6 +377,7 @@ export default function EmailList() {
                           onArchive={(emailId) => handleArchiveMessage(emailId, thread.threadId)}
                           isArchiving={archivingIds.has(message.id)}
                           showArchiveButton={threadMessages[thread.threadId].length > 1}
+                          archivedAt={message.archivedAt}
                         />
                       ))}
                     </div>
@@ -351,8 +388,9 @@ export default function EmailList() {
               )}
             </div>
           );
-        })}
+          })}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

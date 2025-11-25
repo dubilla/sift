@@ -14,6 +14,7 @@ interface EmailMessageProps {
   onArchive?: (emailId: string) => void;
   isArchiving?: boolean;
   showArchiveButton?: boolean;
+  archivedAt?: Date | null;
 }
 
 export default function EmailMessage({
@@ -27,6 +28,7 @@ export default function EmailMessage({
   onArchive,
   isArchiving = false,
   showArchiveButton = false,
+  archivedAt,
 }: EmailMessageProps) {
   const sender = parseFromHeader(from);
 
@@ -49,8 +51,12 @@ export default function EmailMessage({
           .join("")
       : "";
 
+  const isArchived = !!archivedAt;
+
   return (
-    <div className="border-l-4 border-gray-300 pl-4 py-3">
+    <div
+      className={`border-l-4 pl-4 py-3 ${isArchived ? "border-gray-200 opacity-60" : "border-gray-300"}`}
+    >
       <div className="flex items-start justify-between gap-4 mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 mb-1">
