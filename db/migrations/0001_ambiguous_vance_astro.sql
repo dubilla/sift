@@ -1,0 +1,1 @@
+ALTER TABLE "user_stats" ADD COLUMN "total_unarchived_count" integer DEFAULT 0 NOT NULL;

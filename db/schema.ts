@@ -70,6 +70,7 @@ export const userStats = pgTable("user_stats", {
     .primaryKey()
     .references(() => users.id),
   totalUnarchived: integer("total_unarchived").default(0).notNull(),
+  totalUnarchivedCount: integer("total_unarchived_count").default(0).notNull(),
   lastSyncedAt: timestamp("last_synced_at"),
   lastInboxZero: timestamp("last_inbox_zero"),
   inboxZeroStreak: integer("inbox_zero_streak").default(0).notNull(),
