@@ -26,13 +26,21 @@ vi.mock("@/lib/services/gmail", () => ({
   getUnarchivedEmails: vi.fn(),
 }));
 
+vi.mock("@/lib/services/token", () => ({
+  getValidAccessToken: vi.fn(),
+}));
+
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((col, val) => ({ type: "eq", col, val })),
+  and: vi.fn((...args) => ({ type: "and", args })),
+  isNull: vi.fn((col) => ({ type: "isNull", col })),
+  count: vi.fn(() => ({ type: "count" })),
 }));
 
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
+import { getValidAccessToken } from "@/lib/services/token";
 
 describe("POST /api/emails/sync", () => {
   beforeEach(() => {
@@ -42,7 +50,10 @@ describe("POST /api/emails/sync", () => {
   it("returns 401 when user is not authenticated", async () => {
     vi.mocked(auth).mockResolvedValue(null as any);
 
-    const response = await POST();
+    const request = new Request("http://localhost/api/emails/sync", {
+      method: "POST",
+    });
+    const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(401);
@@ -54,52 +65,56 @@ describe("POST /api/emails/sync", () => {
       user: { id: "user123" },
     } as any);
 
-    const mockLimit = vi.fn().mockResolvedValue([]);
-    const mockWhere = vi.fn(() => ({ limit: mockLimit }));
-    const mockFrom = vi.fn(() => ({ where: mockWhere }));
+    vi.mocked(getValidAccessToken).mockRejectedValue(
+      new Error("No account found for user")
+    );
 
-    vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-
-    const response = await POST();
+    const request = new Request("http://localhost/api/emails/sync", {
+      method: "POST",
+    });
+    const response = await POST(request);
     const data = await response.json();
 
-    expect(response.status).toBe(400);
-    expect(data.error).toBe("No access token found");
+    expect(response.status).toBe(500);
+    expect(data.error).toBe("Failed to sync emails");
   });
 
   it("fetches emails from Gmail and stores them in database", async () => {
-    const mockGmailEmails = [
-      {
-        id: "gmail-1",
-        threadId: "thread-1",
-        subject: "Test Subject",
-        from: "sender@example.com",
-        to: "recipient@example.com",
-        snippet: "Test snippet",
-        date: new Date("2024-01-15"),
-      },
-    ];
+    const mockGmailResponse = {
+      emails: [
+        {
+          id: "gmail-1",
+          threadId: "thread-1",
+          subject: "Test Subject",
+          from: "sender@example.com",
+          to: "recipient@example.com",
+          snippet: "Test snippet",
+          date: new Date("2024-01-15"),
+        },
+      ],
+      nextPageToken: undefined,
+      resultSizeEstimate: 150,
+    };
 
     vi.mocked(auth).mockResolvedValue({
       user: { id: "user123" },
     } as any);
 
-    const mockLimit = vi.fn().mockResolvedValue([
-      { access_token: "mock-access-token" },
-    ]);
-    const mockWhere = vi.fn(() => ({ limit: mockLimit }));
-    const mockFrom = vi.fn(() => ({ where: mockWhere }));
+    vi.mocked(getValidAccessToken).mockResolvedValue("mock-access-token");
+    vi.mocked(getUnarchivedEmails).mockResolvedValue(mockGmailResponse);
 
-    vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-    vi.mocked(getUnarchivedEmails).mockResolvedValue(mockGmailEmails);
-
+    const mockOnConflictDoUpdate = vi.fn().mockResolvedValue(undefined);
     const mockOnConflictDoNothing = vi.fn().mockResolvedValue(undefined);
     const mockValues = vi.fn(() => ({
       onConflictDoNothing: mockOnConflictDoNothing,
+      onConflictDoUpdate: mockOnConflictDoUpdate,
     }));
     vi.mocked(db.insert).mockReturnValue({ values: mockValues } as any);
 
-    const response = await POST();
+    const request = new Request("http://localhost/api/emails/sync", {
+      method: "POST",
+    });
+    const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -107,7 +122,8 @@ describe("POST /api/emails/sync", () => {
     expect(data.emails).toHaveLength(1);
     expect(data.emails[0].id).toBe("gmail-1");
     expect(data.emails[0].subject).toBe("Test Subject");
-    expect(getUnarchivedEmails).toHaveBeenCalledWith("mock-access-token", 100);
+    expect(data.nextPageToken).toBeUndefined();
+    expect(getUnarchivedEmails).toHaveBeenCalledWith("mock-access-token", 100, undefined);
     expect(mockValues).toHaveBeenCalledWith([
       expect.objectContaining({
         id: "gmail-1",
@@ -119,51 +135,55 @@ describe("POST /api/emails/sync", () => {
   });
 
   it("handles multiple emails correctly", async () => {
-    const mockGmailEmails = [
-      {
-        id: "1",
-        threadId: "t1",
-        subject: "Email 1",
-        from: "sender1@example.com",
-        to: "user@example.com",
-        snippet: "Snippet 1",
-        date: new Date("2024-01-15"),
-      },
-      {
-        id: "2",
-        threadId: "t2",
-        subject: "Email 2",
-        from: "sender2@example.com",
-        to: "user@example.com",
-        snippet: "Snippet 2",
-        date: new Date("2024-01-14"),
-      },
-    ];
+    const mockGmailResponse = {
+      emails: [
+        {
+          id: "1",
+          threadId: "t1",
+          subject: "Email 1",
+          from: "sender1@example.com",
+          to: "user@example.com",
+          snippet: "Snippet 1",
+          date: new Date("2024-01-15"),
+        },
+        {
+          id: "2",
+          threadId: "t2",
+          subject: "Email 2",
+          from: "sender2@example.com",
+          to: "user@example.com",
+          snippet: "Snippet 2",
+          date: new Date("2024-01-14"),
+        },
+      ],
+      nextPageToken: "next-page-123",
+      resultSizeEstimate: 250,
+    };
 
     vi.mocked(auth).mockResolvedValue({
       user: { id: "user123" },
     } as any);
 
-    const mockLimit = vi.fn().mockResolvedValue([
-      { access_token: "token" },
-    ]);
-    const mockWhere = vi.fn(() => ({ limit: mockLimit }));
-    const mockFrom = vi.fn(() => ({ where: mockWhere }));
+    vi.mocked(getValidAccessToken).mockResolvedValue("token");
+    vi.mocked(getUnarchivedEmails).mockResolvedValue(mockGmailResponse);
 
-    vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-    vi.mocked(getUnarchivedEmails).mockResolvedValue(mockGmailEmails);
-
+    const mockOnConflictDoUpdate = vi.fn().mockResolvedValue(undefined);
     const mockOnConflictDoNothing = vi.fn().mockResolvedValue(undefined);
     const mockValues = vi.fn(() => ({
       onConflictDoNothing: mockOnConflictDoNothing,
+      onConflictDoUpdate: mockOnConflictDoUpdate,
     }));
     vi.mocked(db.insert).mockReturnValue({ values: mockValues } as any);
 
-    const response = await POST();
+    const request = new Request("http://localhost/api/emails/sync", {
+      method: "POST",
+    });
+    const response = await POST(request);
     const data = await response.json();
 
     expect(data.synced).toBe(2);
     expect(data.emails).toHaveLength(2);
+    expect(data.nextPageToken).toBe("next-page-123");
   });
 
   it("returns 500 on Gmail API error", async () => {
@@ -171,18 +191,15 @@ describe("POST /api/emails/sync", () => {
       user: { id: "user123" },
     } as any);
 
-    const mockLimit = vi.fn().mockResolvedValue([
-      { access_token: "token" },
-    ]);
-    const mockWhere = vi.fn(() => ({ limit: mockLimit }));
-    const mockFrom = vi.fn(() => ({ where: mockWhere }));
-
-    vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
+    vi.mocked(getValidAccessToken).mockResolvedValue("token");
     vi.mocked(getUnarchivedEmails).mockRejectedValue(
       new Error("Gmail API error")
     );
 
-    const response = await POST();
+    const request = new Request("http://localhost/api/emails/sync", {
+      method: "POST",
+    });
+    const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(500);
