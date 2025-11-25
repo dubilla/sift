@@ -1,9 +1,10 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { emails } from "@/db/schema";
+import { emails, userStats } from "@/db/schema";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
+import { eq, and, isNull, count } from "drizzle-orm";
 
 export async function POST(request: Request) {
   try {
@@ -18,9 +19,10 @@ export async function POST(request: Request) {
 
     // Parse request body for pagination params
     const body = await request.json().catch(() => ({}));
-    const { pageToken, maxResults = 100 } = body;
+    const { pageToken } = body;
 
-    const result = await getUnarchivedEmails(accessToken, maxResults, pageToken);
+    // Fetch next batch of emails
+    const result = await getUnarchivedEmails(accessToken, 100, pageToken);
 
     const emailRecords = result.emails.map((email) => ({
       id: email.id,
@@ -44,13 +46,37 @@ export async function POST(request: Request) {
         .onConflictDoNothing({ target: emails.id });
     }
 
+    // Get current count of unarchived emails in DB
+    const dbCountResult = await db
+      .select({ count: count() })
+      .from(emails)
+      .where(
+        and(
+          eq(emails.userId, session.user.id),
+          isNull(emails.archivedAt),
+          isNull(emails.deletedAt)
+        )
+      );
+
+    const currentDbCount = dbCountResult[0]?.count || 0;
+
+    // Get total count from user_stats
+    const statsResult = await db
+      .select()
+      .from(userStats)
+      .where(eq(userStats.userId, session.user.id));
+
+    const totalCount = statsResult[0]?.totalUnarchivedCount || 0;
+
     return NextResponse.json({
       synced: emailRecords.length,
-      emails: result.emails,
       nextPageToken: result.nextPageToken,
+      currentCount: currentDbCount,
+      totalCount,
+      isComplete: !result.nextPageToken,
     });
   } catch (error) {
-    console.error("Error in /api/emails/sync:", error);
+    console.error("Error in /api/emails/sync/background:", error);
     return NextResponse.json(
       { error: "Failed to sync emails" },
       { status: 500 }

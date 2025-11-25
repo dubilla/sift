@@ -32,7 +32,8 @@ export async function getUnarchivedEmailCount(accessToken: string) {
 
 export async function getUnarchivedEmails(
   accessToken: string,
-  maxResults: number = 100
+  maxResults: number = 100,
+  pageToken?: string
 ) {
   try {
     const gmail = await getGmailClient(accessToken);
@@ -41,10 +42,15 @@ export async function getUnarchivedEmails(
       userId: "me",
       q: "in:inbox",
       maxResults,
+      pageToken,
     });
 
     if (!response.data.messages) {
-      return [];
+      return {
+        emails: [],
+        nextPageToken: undefined,
+        resultSizeEstimate: response.data.resultSizeEstimate || 0,
+      };
     }
 
     const emails = await Promise.all(
@@ -72,7 +78,11 @@ export async function getUnarchivedEmails(
       })
     );
 
-    return emails;
+    return {
+      emails,
+      nextPageToken: response.data.nextPageToken,
+      resultSizeEstimate: response.data.resultSizeEstimate || 0,
+    };
   } catch (error) {
     console.error("Error fetching unarchived emails:", error);
     throw error;
