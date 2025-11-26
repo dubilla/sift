@@ -281,12 +281,12 @@ export default function EmailList() {
           return (
             <div key={thread.threadId} className="transition-colors">
               <div className="p-4 hover:bg-gray-50">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start justify-between gap-2 sm:gap-4">
                   <div
                     className="flex-1 min-w-0 cursor-pointer"
                     onClick={() => toggleThread(thread.threadId)}
                   >
-                    <div className="flex items-baseline gap-2 mb-1">
+                    <div className="flex items-baseline gap-2 mb-1 flex-wrap">
                       <span className="font-semibold text-gray-900 truncate">
                         {sender.name}
                       </span>
@@ -306,15 +306,15 @@ export default function EmailList() {
                       {thread.snippet}
                     </p>
                   </div>
-                  <div className="flex gap-2 flex-shrink-0">
+                  <div className="flex gap-1 sm:gap-2 flex-shrink-0">
                     {thread.messageCount > 1 && (
                       <button
                         onClick={() => toggleThread(thread.threadId)}
-                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         title={isExpanded ? "Collapse thread" : "Expand thread"}
                       >
                         <svg
-                          className={`w-5 h-5 transition-transform ${
+                          className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${
                             isExpanded ? "rotate-180" : ""
                           }`}
                           fill="none"
@@ -333,11 +333,11 @@ export default function EmailList() {
                     <button
                       onClick={() => handleArchiveThread(thread.threadId)}
                       disabled={isArchiving}
-                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Archive thread"
                     >
                       <svg
-                        className="w-5 h-5"
+                        className="w-4 h-4 sm:w-5 sm:h-5"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
