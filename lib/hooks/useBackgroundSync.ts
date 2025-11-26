@@ -33,7 +33,6 @@ export function useBackgroundSync() {
         ...prev,
         currentCount: data.currentCount,
         totalCount: data.totalCount,
-        isSyncing: !data.isComplete,
       }));
 
       // If there's more to sync, continue
@@ -42,6 +41,7 @@ export function useBackgroundSync() {
         await new Promise((resolve) => setTimeout(resolve, 100));
         await syncBatch(data.nextPageToken);
       } else {
+        // Sync complete - set isSyncing to false
         setSyncState((prev) => ({ ...prev, isSyncing: false }));
       }
 
