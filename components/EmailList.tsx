@@ -37,16 +37,32 @@ export default function EmailList() {
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const [threadMessages, setThreadMessages] = useState<Record<string, EmailMessageData[]>>({});
   const [loadingThreads, setLoadingThreads] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const { syncState, startSync } = useBackgroundSync();
-  const wasSyncing = useRef(false);
 
-  const fetchThreads = async () => {
-    const response = await fetch("/api/threads");
-    const data = await response.json();
-    if (data.threads) {
-      setThreads(data.threads);
+  const fetchThreads = async (pageNum: number = 1, append: boolean = false) => {
+    try {
+      const response = await fetch(`/api/threads?page=${pageNum}&limit=100`);
+      const data = await response.json();
+      if (data.threads) {
+        setThreads(prev => append ? [...prev, ...data.threads] : data.threads);
+        setHasMore(data.hasMore);
+        setPage(pageNum);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch threads");
+      setTimeout(() => setError(null), 5000);
     }
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    await fetchThreads(page + 1, true);
+    setLoadingMore(false);
   };
 
   const handleArchiveThread = async (threadId: string) => {
@@ -166,11 +182,9 @@ export default function EmailList() {
   useEffect(() => {
     async function initialize() {
       try {
-        const response = await fetch("/api/threads");
-        const data = await response.json();
+        await fetchThreads(1, false);
 
-        if (data.threads && data.threads.length > 0) {
-          setThreads(data.threads);
+        if (threads.length > 0) {
           setLoading(false);
           startSync();
         } else {
@@ -180,12 +194,7 @@ export default function EmailList() {
           });
           const syncData = await syncResponse.json();
 
-          const threadsResponse = await fetch("/api/threads");
-          const threadsData = await threadsResponse.json();
-
-          if (threadsData.threads) {
-            setThreads(threadsData.threads);
-          }
+          await fetchThreads(1, false);
           setSyncing(false);
           setLoading(false);
 
@@ -202,17 +211,6 @@ export default function EmailList() {
 
     initialize();
   }, [startSync]);
-
-  // Auto-refresh threads when background sync completes
-  useEffect(() => {
-    if (syncState.isSyncing) {
-      wasSyncing.current = true;
-    } else if (wasSyncing.current && !syncState.isSyncing) {
-      // Sync just completed
-      wasSyncing.current = false;
-      fetchThreads();
-    }
-  }, [syncState.isSyncing]);
 
 
   if (loading || syncing) {
@@ -390,6 +388,17 @@ export default function EmailList() {
           );
           })}
         </div>
+        {hasMore && (
+          <div className="p-4 border-t border-gray-200">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="w-full py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loadingMore ? "Loading..." : "Load More"}
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

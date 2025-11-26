@@ -4,13 +4,19 @@ import { emails } from "@/db/schema";
 import { and, eq, isNull, desc, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await auth();
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Get pagination params from query string
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "100");
+    const offset = (page - 1) * limit;
 
     // Query to get threads with latest message metadata and message count
     // Using FIRST_VALUE window function would be better, but keeping subqueries for compatibility
@@ -60,9 +66,10 @@ export async function GET() {
       )
       .groupBy(emails.threadId, emails.userId)
       .orderBy(desc(sql`MAX(${emails.date})`))
-      .limit(100);
+      .limit(limit)
+      .offset(offset);
 
-    return NextResponse.json({ threads });
+    return NextResponse.json({ threads, page, limit, hasMore: threads.length === limit });
   } catch (error) {
     console.error("Error in /api/threads:", error);
     return NextResponse.json(

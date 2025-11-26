@@ -47,7 +47,8 @@ describe("GET /api/threads", () => {
   it("returns 401 when user is not authenticated", async () => {
     vi.mocked(auth).mockResolvedValue(null as any);
 
-    const response = await GET();
+    const request = new Request("http://localhost/api/threads");
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(401);
@@ -78,7 +79,8 @@ describe("GET /api/threads", () => {
       },
     ];
 
-    const mockLimit = vi.fn().mockResolvedValue(mockThreads);
+    const mockOffset = vi.fn().mockResolvedValue(mockThreads);
+    const mockLimit = vi.fn(() => ({ offset: mockOffset }));
     const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
     const mockGroupBy = vi.fn(() => ({ orderBy: mockOrderBy }));
     const mockWhere = vi.fn(() => ({ groupBy: mockGroupBy }));
@@ -86,7 +88,8 @@ describe("GET /api/threads", () => {
 
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const request = new Request("http://localhost/api/threads");
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -123,7 +126,8 @@ describe("GET /api/threads", () => {
       },
     ];
 
-    const mockLimit = vi.fn().mockResolvedValue(mockThreads);
+    const mockOffset = vi.fn().mockResolvedValue(mockThreads);
+    const mockLimit = vi.fn(() => ({ offset: mockOffset }));
     const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
     const mockGroupBy = vi.fn(() => ({ orderBy: mockOrderBy }));
     const mockWhere = vi.fn(() => ({ groupBy: mockGroupBy }));
@@ -131,7 +135,8 @@ describe("GET /api/threads", () => {
 
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const request = new Request("http://localhost/api/threads");
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -144,7 +149,8 @@ describe("GET /api/threads", () => {
       user: { id: "user123" },
     } as any);
 
-    const mockLimit = vi.fn().mockResolvedValue([]);
+    const mockOffset = vi.fn().mockResolvedValue([]);
+    const mockLimit = vi.fn(() => ({ offset: mockOffset }));
     const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
     const mockGroupBy = vi.fn(() => ({ orderBy: mockOrderBy }));
     const mockWhere = vi.fn(() => ({ groupBy: mockGroupBy }));
@@ -152,7 +158,8 @@ describe("GET /api/threads", () => {
 
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const request = new Request("http://localhost/api/threads");
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -174,7 +181,8 @@ describe("GET /api/threads", () => {
       messageCount: Math.floor(Math.random() * 5) + 1,
     }));
 
-    const mockLimit = vi.fn().mockResolvedValue(mockThreads);
+    const mockOffset = vi.fn().mockResolvedValue(mockThreads);
+    const mockLimit = vi.fn(() => ({ offset: mockOffset }));
     const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
     const mockGroupBy = vi.fn(() => ({ orderBy: mockOrderBy }));
     const mockWhere = vi.fn(() => ({ groupBy: mockGroupBy }));
@@ -182,7 +190,8 @@ describe("GET /api/threads", () => {
 
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const request = new Request("http://localhost/api/threads");
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -222,7 +231,8 @@ describe("GET /api/threads", () => {
       },
     ];
 
-    const mockLimit = vi.fn().mockResolvedValue(mockThreads);
+    const mockOffset = vi.fn().mockResolvedValue(mockThreads);
+    const mockLimit = vi.fn(() => ({ offset: mockOffset }));
     const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
     const mockGroupBy = vi.fn(() => ({ orderBy: mockOrderBy }));
     const mockWhere = vi.fn(() => ({ groupBy: mockGroupBy }));
@@ -230,7 +240,8 @@ describe("GET /api/threads", () => {
 
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const request = new Request("http://localhost/api/threads");
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -244,7 +255,8 @@ describe("GET /api/threads", () => {
       user: { id: "user123" },
     } as any);
 
-    const mockLimit = vi.fn().mockRejectedValue(new Error("Database error"));
+    const mockOffset = vi.fn().mockRejectedValue(new Error("Database error"));
+    const mockLimit = vi.fn(() => ({ offset: mockOffset }));
     const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
     const mockGroupBy = vi.fn(() => ({ orderBy: mockOrderBy }));
     const mockWhere = vi.fn(() => ({ groupBy: mockGroupBy }));
@@ -252,7 +264,8 @@ describe("GET /api/threads", () => {
 
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const request = new Request("http://localhost/api/threads");
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(500);
