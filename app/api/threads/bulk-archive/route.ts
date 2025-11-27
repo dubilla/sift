@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     // Get all unarchived email IDs for the threads
     const threadEmails = await db
-      .select({ id: emails.id, gmailId: emails.gmailId })
+      .select({ id: emails.id })
       .from(emails)
       .where(
         and(
@@ -50,8 +50,8 @@ export async function POST(request: NextRequest) {
       .set({ archivedAt: new Date() })
       .where(inArray(emails.threadId, threadIds));
 
-    // Batch modify to remove INBOX label from all emails
-    const gmailIds = threadEmails.map((email) => email.gmailId);
+    // Batch modify to remove INBOX label from all emails (id is the Gmail message ID)
+    const gmailIds = threadEmails.map((email) => email.id);
 
     // Gmail API supports batch modify with up to 1000 IDs at a time
     const batchSize = 1000;
