@@ -40,6 +40,9 @@ export default function EmailList() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
+  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
+  const [bulkArchiving, setBulkArchiving] = useState(false);
 
   const { syncState, startSync } = useBackgroundSync();
 
@@ -132,6 +135,72 @@ export default function EmailList() {
         next.delete(emailId);
         return next;
       });
+    }
+  };
+
+  const handleCheckboxClick = (threadId: string, index: number, shiftKey: boolean) => {
+    if (shiftKey && lastClickedIndex !== null) {
+      const start = Math.min(lastClickedIndex, index);
+      const end = Math.max(lastClickedIndex, index);
+      const threadsInRange = threads.slice(start, end + 1);
+
+      setSelectedThreadIds((prev) => {
+        const next = new Set(prev);
+        threadsInRange.forEach((thread) => next.add(thread.threadId));
+        return next;
+      });
+    } else {
+      setSelectedThreadIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(threadId)) {
+          next.delete(threadId);
+        } else {
+          next.add(threadId);
+        }
+        return next;
+      });
+    }
+    setLastClickedIndex(index);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedThreadIds.size === threads.length) {
+      setSelectedThreadIds(new Set());
+    } else {
+      setSelectedThreadIds(new Set(threads.map((t) => t.threadId)));
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    if (selectedThreadIds.size === 0) return;
+
+    setBulkArchiving(true);
+    const threadIdsToArchive = Array.from(selectedThreadIds);
+
+    const originalThreads = [...threads];
+    setThreads((prev) => prev.filter((t) => !selectedThreadIds.has(t.threadId)));
+    setSelectedThreadIds(new Set());
+
+    try {
+      const response = await fetch('/api/threads/bulk-archive', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ threadIds: threadIdsToArchive }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to bulk archive threads');
+      }
+
+      window.dispatchEvent(new CustomEvent('emailArchived'));
+    } catch (err) {
+      setThreads(originalThreads);
+      setError(err instanceof Error ? err.message : 'Failed to bulk archive threads');
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setBulkArchiving(false);
     }
   };
 
@@ -273,15 +342,67 @@ export default function EmailList() {
         isSyncing={syncState.isSyncing}
       />
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        {threads.length > 0 && (
+          <div className="sticky top-0 z-10 bg-gray-100 border-b border-gray-300 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedThreadIds.size === threads.length && threads.length > 0}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  title="Select all"
+                />
+                <span className="text-sm text-gray-700 font-medium">
+                  {selectedThreadIds.size > 0
+                    ? `${selectedThreadIds.size} selected`
+                    : 'Select all'}
+                </span>
+              </div>
+              {selectedThreadIds.size > 0 && (
+                <button
+                  onClick={handleBulkArchive}
+                  disabled={bulkArchiving}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                    />
+                  </svg>
+                  <span className="text-sm font-medium">
+                    {bulkArchiving ? 'Archiving...' : `Archive ${selectedThreadIds.size}`}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         <div className="divide-y divide-gray-200">
-          {threads.map((thread) => {
+          {threads.map((thread, index) => {
           const sender = parseFromHeader(thread.from);
           const isArchiving = archivingIds.has(thread.threadId);
           const isExpanded = expandedThreads.has(thread.threadId);
+          const isSelected = selectedThreadIds.has(thread.threadId);
           return (
-            <div key={thread.threadId} className="transition-colors">
+            <div key={thread.threadId} className={`transition-colors ${isSelected ? 'bg-blue-50' : ''}`}>
               <div className="p-4 hover:bg-gray-50">
                 <div className="flex items-start justify-between gap-2 sm:gap-4">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={(e) => handleCheckboxClick(thread.threadId, index, e.shiftKey)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-4 h-4 mt-1 text-blue-600 border-gray-300 rounded focus:ring-blue-500 flex-shrink-0"
+                  />
                   <div
                     className="flex-1 min-w-0 cursor-pointer"
                     onClick={() => toggleThread(thread.threadId)}
