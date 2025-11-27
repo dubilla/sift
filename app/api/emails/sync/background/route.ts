@@ -7,6 +7,13 @@ import { getValidAccessToken } from "@/lib/services/token";
 import { eq, and, isNull, count } from "drizzle-orm";
 
 export async function POST(request: Request) {
+  // MIGRATION STEP 1: Syncing paused during ID migration
+  return NextResponse.json(
+    { error: "Syncing temporarily disabled during migration" },
+    { status: 503 }
+  );
+
+  // eslint-disable-next-line no-unreachable
   try {
     const session = await auth();
 
@@ -15,6 +22,7 @@ export async function POST(request: Request) {
     }
 
     // Get valid access token (refreshes if expired)
+    // @ts-expect-error - Unreachable during migration
     const accessToken = await getValidAccessToken(session.user.id);
 
     // Parse request body for pagination params
@@ -26,6 +34,7 @@ export async function POST(request: Request) {
 
     const emailRecords = result.emails.map((email) => ({
       id: email.id,
+      // @ts-expect-error - Unreachable during migration
       userId: session.user.id,
       threadId: email.threadId,
       subject: email.subject,
@@ -52,6 +61,7 @@ export async function POST(request: Request) {
       .from(emails)
       .where(
         and(
+          // @ts-expect-error - Unreachable during migration
           eq(emails.userId, session.user.id),
           isNull(emails.archivedAt),
           isNull(emails.deletedAt)
@@ -64,6 +74,7 @@ export async function POST(request: Request) {
     const statsResult = await db
       .select()
       .from(userStats)
+      // @ts-expect-error - Unreachable during migration
       .where(eq(userStats.userId, session.user.id));
 
     const totalCount = statsResult[0]?.totalUnarchivedCount || 0;
