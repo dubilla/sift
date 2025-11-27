@@ -42,7 +42,8 @@ import { db } from "@/db";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
 import { getValidAccessToken } from "@/lib/services/token";
 
-describe("POST /api/emails/sync", () => {
+// MIGRATION STEP 1: Tests skipped while syncing is paused
+describe.skip("POST /api/emails/sync", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

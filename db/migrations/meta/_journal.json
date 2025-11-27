@@ -15,6 +15,13 @@
       "when": 1764037035887,
       "tag": "0001_ambiguous_vance_astro",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1764271002040,
+      "tag": "0002_cooing_living_lightning",
+      "breakpoints": true
     }
   ]
 }
