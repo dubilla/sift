@@ -21,7 +21,6 @@ vi.mock("@/lib/services/token", () => ({
 vi.mock("@/db/schema", () => ({
   emails: {
     id: "id",
-    gmailId: "gmailId",
     threadId: "threadId",
     archivedAt: "archivedAt",
     deletedAt: "deletedAt",
@@ -130,9 +129,9 @@ describe("/api/threads/bulk-archive", () => {
     vi.mocked(getValidAccessToken).mockResolvedValue("valid-token");
 
     const mockEmails = [
-      { id: "email1", gmailId: "gmail1" },
-      { id: "email2", gmailId: "gmail2" },
-      { id: "email3", gmailId: "gmail3" },
+      { id: "gmail1" },
+      { id: "gmail2" },
+      { id: "gmail3" },
     ];
 
     const mockSelect = vi.fn().mockReturnThis();
@@ -191,7 +190,7 @@ describe("/api/threads/bulk-archive", () => {
     vi.mocked(auth).mockResolvedValue(mockSession as any);
     vi.mocked(getValidAccessToken).mockResolvedValue("refreshed-token");
 
-    const mockEmails = [{ id: "email1", gmailId: "gmail1" }];
+    const mockEmails = [{ id: "gmail1" }];
 
     const mockSelect = vi.fn().mockReturnThis();
     const mockFrom = vi.fn().mockReturnThis();
@@ -239,7 +238,7 @@ describe("/api/threads/bulk-archive", () => {
     vi.mocked(auth).mockResolvedValue(mockSession as any);
     vi.mocked(getValidAccessToken).mockResolvedValue("valid-token");
 
-    const mockEmails = [{ id: "email1", gmailId: "gmail1" }];
+    const mockEmails = [{ id: "gmail1" }];
 
     const mockSelect = vi.fn().mockReturnThis();
     const mockFrom = vi.fn().mockReturnThis();
@@ -278,8 +277,7 @@ describe("/api/threads/bulk-archive", () => {
 
     // Create 2500 emails to test batching (should create 3 batches of 1000, 1000, 500)
     const mockEmails = Array.from({ length: 2500 }, (_, i) => ({
-      id: `email${i}`,
-      gmailId: `gmail${i}`,
+      id: `gmail${i}`,
     }));
 
     const mockSelect = vi.fn().mockReturnThis();
@@ -325,8 +323,8 @@ describe("/api/threads/bulk-archive", () => {
     vi.mocked(getValidAccessToken).mockResolvedValue("valid-token");
 
     const mockEmails = [
-      { id: "email1", gmailId: "gmail1" },
-      { id: "email2", gmailId: "gmail2" },
+      { id: "gmail1" },
+      { id: "gmail2" },
     ];
 
     const mockSelect = vi.fn().mockReturnThis();
@@ -366,12 +364,12 @@ describe("/api/threads/bulk-archive", () => {
         expect.objectContaining({
           userId: "user-id",
           action: "archive",
-          emailId: "email1",
+          emailId: "gmail1",
         }),
         expect.objectContaining({
           userId: "user-id",
           action: "archive",
-          emailId: "email2",
+          emailId: "gmail2",
         }),
       ])
     );

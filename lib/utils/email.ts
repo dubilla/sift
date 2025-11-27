@@ -3,17 +3,25 @@ export function formatEmailDate(dateString: string): string {
   const now = new Date();
   const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
 
+  // Use the browser's timezone automatically
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   if (diffInHours < 24) {
     return date.toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
+      timeZone,
     });
   } else if (diffInHours < 168) {
-    return date.toLocaleDateString("en-US", { weekday: "short" });
+    return date.toLocaleDateString("en-US", {
+      weekday: "short",
+      timeZone,
+    });
   } else {
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
+      timeZone,
     });
   }
 }
