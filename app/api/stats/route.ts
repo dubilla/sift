@@ -15,7 +15,7 @@ export async function GET() {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
 
     // Get total unarchived count (unique threads)
     const unarchivedResult = await db
@@ -53,7 +53,7 @@ export async function GET() {
         )
       );
 
-    // Get velocity (emails per minute in last 10 minutes)
+    // Get velocity (emails per minute in last 5 minutes)
     const recentResult = await db
       .select({ count: count() })
       .from(activityLog)
@@ -61,12 +61,12 @@ export async function GET() {
         and(
           eq(activityLog.userId, session.user.id),
           eq(activityLog.action, "archive"),
-          gte(activityLog.createdAt, tenMinutesAgo)
+          gte(activityLog.createdAt, fiveMinutesAgo)
         )
       );
 
     const recentCount = recentResult[0]?.count || 0;
-    const velocity = recentCount / 10; // emails per minute
+    const velocity = recentCount / 5; // emails per minute
 
     return NextResponse.json({
       totalUnarchived: unarchivedResult[0]?.count || 0,

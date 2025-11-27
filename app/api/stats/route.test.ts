@@ -61,7 +61,7 @@ describe("GET /api/stats", () => {
     const mockUnarchivedResult = [{ count: 42 }];
     const mockTodayResult = [{ count: 5 }];
     const mockWeekResult = [{ count: 23 }];
-    const mockRecentResult = [{ count: 10 }]; // 10 emails in last 10 minutes = 1.0 emails/min
+    const mockRecentResult = [{ count: 10 }]; // 10 emails in last 5 minutes = 2.0 emails/min
 
     let callCount = 0;
     const mockWhere = vi.fn().mockImplementation(() => {
@@ -84,7 +84,7 @@ describe("GET /api/stats", () => {
       totalUnarchived: 42,
       parsedToday: 5,
       parsedThisWeek: 23,
-      velocity: 1.0,
+      velocity: 2.0,
     });
     expect(db.select).toHaveBeenCalledTimes(4);
   });
@@ -137,7 +137,7 @@ describe("GET /api/stats", () => {
       user: { id: "user123" },
     } as any);
 
-    // Mock results: 25 emails in last 10 minutes = 2.5 emails/min
+    // Mock results: 25 emails in last 5 minutes = 5.0 emails/min
     const mockUnarchivedResult = [{ count: 100 }];
     const mockTodayResult = [{ count: 50 }];
     const mockWeekResult = [{ count: 150 }];
@@ -160,7 +160,7 @@ describe("GET /api/stats", () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data.velocity).toBe(2.5);
+    expect(data.velocity).toBe(5.0);
   });
 
   it("rounds velocity to one decimal place", async () => {
@@ -168,7 +168,7 @@ describe("GET /api/stats", () => {
       user: { id: "user123" },
     } as any);
 
-    // Mock results: 7 emails in last 10 minutes = 0.7 emails/min
+    // Mock results: 7 emails in last 5 minutes = 1.4 emails/min
     const mockUnarchivedResult = [{ count: 50 }];
     const mockTodayResult = [{ count: 10 }];
     const mockWeekResult = [{ count: 30 }];
@@ -191,7 +191,7 @@ describe("GET /api/stats", () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data.velocity).toBe(0.7);
+    expect(data.velocity).toBe(1.4);
   });
 
   it("counts only archive actions, not other actions", async () => {
@@ -203,7 +203,7 @@ describe("GET /api/stats", () => {
     const mockUnarchivedResult = [{ count: 30 }];
     const mockTodayResult = [{ count: 8 }]; // only archive actions today
     const mockWeekResult = [{ count: 20 }]; // only archive actions this week
-    const mockRecentResult = [{ count: 3 }]; // only archive actions in last 10 min
+    const mockRecentResult = [{ count: 3 }]; // only archive actions in last 5 min
 
     let callCount = 0;
     const mockWhere = vi.fn().mockImplementation(() => {
@@ -224,7 +224,7 @@ describe("GET /api/stats", () => {
     expect(response.status).toBe(200);
     expect(data.parsedToday).toBe(8);
     expect(data.parsedThisWeek).toBe(20);
-    expect(data.velocity).toBe(0.3);
+    expect(data.velocity).toBe(0.6);
   });
 
   it("returns 500 on database error", async () => {
@@ -275,7 +275,7 @@ describe("GET /api/stats", () => {
     const mockUnarchivedResult = [{ count: 5 }]; // almost done!
     const mockTodayResult = [{ count: 250 }]; // archived 250 today
     const mockWeekResult = [{ count: 1500 }]; // archived 1500 this week
-    const mockRecentResult = [{ count: 50 }]; // 50 in last 10 min = 5.0/min
+    const mockRecentResult = [{ count: 50 }]; // 50 in last 5 min = 10.0/min
 
     let callCount = 0;
     const mockWhere = vi.fn().mockImplementation(() => {
@@ -298,7 +298,7 @@ describe("GET /api/stats", () => {
       totalUnarchived: 5,
       parsedToday: 250,
       parsedThisWeek: 1500,
-      velocity: 5.0,
+      velocity: 10.0,
     });
   });
 });
