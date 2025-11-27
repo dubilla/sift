@@ -34,6 +34,7 @@ export async function POST(request: Request) {
 
     const emailRecords = result.emails.map((email) => ({
       id: email.id,
+      externalId: email.id, // Will be properly set in Step 4
       // @ts-expect-error - Unreachable during migration
       userId: session.user.id,
       threadId: email.threadId,
