@@ -399,8 +399,11 @@ export default function EmailList() {
                   <input
                     type="checkbox"
                     checked={isSelected}
-                    onChange={(e) => handleCheckboxClick(thread.threadId, index, e.shiftKey)}
-                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => {}}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCheckboxClick(thread.threadId, index, e.shiftKey);
+                    }}
                     className="w-4 h-4 mt-1 text-blue-600 border-gray-300 rounded focus:ring-blue-500 flex-shrink-0"
                   />
                   <div
