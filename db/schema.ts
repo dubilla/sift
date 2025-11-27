@@ -79,7 +79,7 @@ export const userStats = pgTable("user_stats", {
 
 export const emails = pgTable("emails", {
   id: text("id").primaryKey(), // Will become internal UUID in Step 5
-  externalId: text("external_id"), // Gmail message ID (nullable in Step 1, will add constraints in Step 3)
+  externalId: text("external_id").notNull().unique(), // Gmail message ID
   userId: text("user_id")
     .notNull()
     .references(() => users.id),
