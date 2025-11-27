@@ -138,6 +138,7 @@ describe("POST /api/threads/[threadId]/archive", () => {
     const mockThreadEmails = [
       {
         id: "email-1",
+        externalId: "gmail-1",
         threadId: "thread-123",
         userId: "user123",
         subject: "Test 1",
@@ -150,6 +151,7 @@ describe("POST /api/threads/[threadId]/archive", () => {
       },
       {
         id: "email-2",
+        externalId: "gmail-2",
         threadId: "thread-123",
         userId: "user123",
         subject: "Test 2",
@@ -207,8 +209,8 @@ describe("POST /api/threads/[threadId]/archive", () => {
     expect(data.success).toBe(true);
     expect(data.archivedCount).toBe(2);
     expect(archiveEmail).toHaveBeenCalledTimes(2);
-    expect(archiveEmail).toHaveBeenCalledWith("mock-token", "email-1");
-    expect(archiveEmail).toHaveBeenCalledWith("mock-token", "email-2");
+    expect(archiveEmail).toHaveBeenCalledWith("mock-token", "gmail-1");
+    expect(archiveEmail).toHaveBeenCalledWith("mock-token", "gmail-2");
   });
 
   it("returns 500 on Gmail API error", async () => {

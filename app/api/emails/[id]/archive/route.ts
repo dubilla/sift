@@ -41,7 +41,7 @@ export async function POST(
     // Get valid access token (refreshes if expired)
     const accessToken = await getValidAccessToken(session.user.id);
 
-    await archiveEmail(accessToken, emailId);
+    await archiveEmail(accessToken, existingEmail[0].externalId);
 
     await db
       .update(emails)

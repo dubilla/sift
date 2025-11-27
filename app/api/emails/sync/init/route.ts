@@ -7,13 +7,6 @@ import { getValidAccessToken } from "@/lib/services/token";
 import { eq } from "drizzle-orm";
 
 export async function POST() {
-  // MIGRATION STEP 1: Syncing paused during ID migration
-  return NextResponse.json(
-    { error: "Syncing temporarily disabled during migration" },
-    { status: 503 }
-  );
-
-  // eslint-disable-next-line no-unreachable
   try {
     const session = await auth();
 
@@ -21,7 +14,6 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // @ts-expect-error - Unreachable during migration
     const accessToken = await getValidAccessToken(session.user.id);
 
     // Get the total unarchived count from Gmail
@@ -31,7 +23,6 @@ export async function POST() {
     await db
       .insert(userStats)
       .values({
-        // @ts-expect-error - Unreachable during migration
         userId: session.user.id,
         totalUnarchivedCount: totalCount,
         totalUnarchived: totalCount,

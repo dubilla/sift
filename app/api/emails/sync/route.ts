@@ -6,13 +6,6 @@ import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
 
 export async function POST(request: Request) {
-  // MIGRATION STEP 1: Syncing paused during ID migration
-  return NextResponse.json(
-    { error: "Syncing temporarily disabled during migration" },
-    { status: 503 }
-  );
-
-  // eslint-disable-next-line no-unreachable
   try {
     const session = await auth();
 
@@ -21,7 +14,6 @@ export async function POST(request: Request) {
     }
 
     // Get valid access token (refreshes if expired)
-    // @ts-expect-error - Unreachable during migration
     const accessToken = await getValidAccessToken(session.user.id);
 
     // Parse request body for pagination params
@@ -31,9 +23,8 @@ export async function POST(request: Request) {
     const result = await getUnarchivedEmails(accessToken, maxResults, pageToken);
 
     const emailRecords = result.emails.map((email) => ({
-      id: email.id,
-      externalId: email.id, // Will be properly set in Step 4
-      // @ts-expect-error - Unreachable during migration
+      id: crypto.randomUUID(),
+      externalId: email.id,
       userId: session.user.id,
       threadId: email.threadId,
       subject: email.subject,
@@ -51,7 +42,7 @@ export async function POST(request: Request) {
       await db
         .insert(emails)
         .values(emailRecords)
-        .onConflictDoNothing({ target: emails.id });
+        .onConflictDoNothing({ target: emails.externalId });
     }
 
     return NextResponse.json({
