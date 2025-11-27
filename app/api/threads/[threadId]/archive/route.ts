@@ -44,7 +44,7 @@ export async function POST(
 
     // Archive all emails in Gmail
     await Promise.all(
-      threadEmails.map((email) => archiveEmail(accessToken, email.id))
+      threadEmails.map((email) => archiveEmail(accessToken, email.externalId))
     );
 
     // Update all emails in database

@@ -129,9 +129,9 @@ describe("/api/threads/bulk-archive", () => {
     vi.mocked(getValidAccessToken).mockResolvedValue("valid-token");
 
     const mockEmails = [
-      { id: "gmail1" },
-      { id: "gmail2" },
-      { id: "gmail3" },
+      { id: "internal-1", externalId: "gmail1" },
+      { id: "internal-2", externalId: "gmail2" },
+      { id: "internal-3", externalId: "gmail3" },
     ];
 
     const mockSelect = vi.fn().mockReturnThis();

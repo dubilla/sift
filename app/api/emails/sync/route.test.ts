@@ -19,6 +19,7 @@ vi.mock("@/db/schema", () => ({
   },
   emails: {
     id: "id",
+    externalId: "externalId",
   },
 }));
 
@@ -42,8 +43,7 @@ import { db } from "@/db";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
 import { getValidAccessToken } from "@/lib/services/token";
 
-// MIGRATION STEP 1: Tests skipped while syncing is paused
-describe.skip("POST /api/emails/sync", () => {
+describe("POST /api/emails/sync", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -127,12 +127,18 @@ describe.skip("POST /api/emails/sync", () => {
     expect(getUnarchivedEmails).toHaveBeenCalledWith("mock-access-token", 100, undefined);
     expect(mockValues).toHaveBeenCalledWith([
       expect.objectContaining({
-        id: "gmail-1",
+        externalId: "gmail-1",
         userId: "user123",
         subject: "Test Subject",
         from: "sender@example.com",
       }),
     ]);
+    // Verify that id is a UUID (not the Gmail ID)
+    const calls: unknown[] = mockValues.mock.calls;
+    const firstCall = calls[0] as unknown[];
+    const firstArg = firstCall[0] as unknown[];
+    const insertedEmail = firstArg[0] as { id: string };
+    expect(insertedEmail.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
   });
 
   it("handles multiple emails correctly", async () => {
