@@ -93,7 +93,7 @@ export default function EmailMessage({
         )}
       </div>
       <div
-        className="prose prose-sm max-w-none text-gray-700"
+        className="prose prose-sm max-w-none text-gray-700 overflow-x-auto break-words [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:block [&_table]:overflow-x-auto"
         dangerouslySetInnerHTML={{ __html: content }}
       />
     </div>
