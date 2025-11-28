@@ -40,37 +40,53 @@ async function migrateToUUIDs() {
       return;
     }
 
+    // Temporarily disable foreign key constraint to allow updating primary keys
+    console.log("Temporarily disabling foreign key constraint...");
+    await db.execute(
+      sql`ALTER TABLE activity_log DROP CONSTRAINT activity_log_email_id_emails_id_fk`
+    );
+
     // Process in batches to avoid locking entire table
     const BATCH_SIZE = 100;
     let migrated = 0;
 
-    for (let i = 0; i < emailRows.length; i += BATCH_SIZE) {
-      const batch = emailRows.slice(i, i + BATCH_SIZE);
+    try {
 
-      // For each email in this batch, generate a UUID and update both tables
-      for (const email of batch) {
-        const oldId = email.id;
-        const newUuid = crypto.randomUUID();
+      for (let i = 0; i < emailRows.length; i += BATCH_SIZE) {
+        const batch = emailRows.slice(i, i + BATCH_SIZE);
 
-        // Use Drizzle's transaction API to ensure both updates succeed or fail together
-        await db.transaction(async (tx) => {
-          // Update the email first (so the new UUID exists before activityLog references it)
-          await tx.execute(
-            sql`UPDATE emails SET id = ${newUuid} WHERE id = ${oldId}`
-          );
+        // For each email in this batch, generate a UUID and update both tables
+        for (const email of batch) {
+          const oldId = email.id;
+          const newUuid = crypto.randomUUID();
 
-          // Then update activityLog references to point to the new UUID
-          await tx.execute(
-            sql`UPDATE activity_log SET email_id = ${newUuid} WHERE email_id = ${oldId}`
-          );
-        });
+          // Use a transaction to ensure both updates succeed or fail together
+          await db.transaction(async (tx) => {
+            // Update the email ID to UUID
+            await tx.execute(
+              sql`UPDATE emails SET id = ${newUuid} WHERE id = ${oldId}`
+            );
 
-        migrated++;
+            // Update activityLog references to point to the new UUID
+            await tx.execute(
+              sql`UPDATE activity_log SET email_id = ${newUuid} WHERE email_id = ${oldId}`
+            );
+          });
 
-        if (migrated % 50 === 0) {
-          console.log(`Progress: ${migrated}/${emailRows.length} emails migrated`);
+          migrated++;
+
+          if (migrated % 50 === 0) {
+            console.log(`Progress: ${migrated}/${emailRows.length} emails migrated`);
+          }
         }
       }
+    } finally {
+      // Always re-enable foreign key constraint, even if migration fails
+      console.log("Re-enabling foreign key constraint...");
+      await db.execute(
+        sql`ALTER TABLE activity_log ADD CONSTRAINT activity_log_email_id_emails_id_fk
+            FOREIGN KEY (email_id) REFERENCES emails(id)`
+      );
     }
 
     console.log(`✅ Migration complete! Migrated ${migrated} emails to UUIDs`);
