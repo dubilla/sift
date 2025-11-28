@@ -54,14 +54,14 @@ async function migrateToUUIDs() {
 
         // Use Drizzle's transaction API to ensure both updates succeed or fail together
         await db.transaction(async (tx) => {
-          // Update activityLog references first
-          await tx.execute(
-            sql`UPDATE activity_log SET email_id = ${newUuid} WHERE email_id = ${oldId}`
-          );
-
-          // Then update the email itself
+          // Update the email first (so the new UUID exists before activityLog references it)
           await tx.execute(
             sql`UPDATE emails SET id = ${newUuid} WHERE id = ${oldId}`
+          );
+
+          // Then update activityLog references to point to the new UUID
+          await tx.execute(
+            sql`UPDATE activity_log SET email_id = ${newUuid} WHERE email_id = ${oldId}`
           );
         });
 
