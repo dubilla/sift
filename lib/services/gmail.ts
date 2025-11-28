@@ -1,5 +1,37 @@
 import { google } from "googleapis";
 
+/**
+ * Parse List-Unsubscribe header and extract unsubscribe URL
+ * Format: <https://example.com/unsubscribe>, <mailto:unsub@example.com>
+ * Preference: https > mailto
+ */
+function parseListUnsubscribe(header: string): {
+  hasUnsubscribe: boolean;
+  url: string | null;
+} {
+  if (!header) {
+    return { hasUnsubscribe: false, url: null };
+  }
+
+  // Extract URLs wrapped in angle brackets
+  const urlMatches = header.match(/<([^>]+)>/g);
+  if (!urlMatches) {
+    return { hasUnsubscribe: false, url: null };
+  }
+
+  // Extract URLs and prefer https over mailto
+  const urls = urlMatches.map((match) => match.slice(1, -1)); // Remove < >
+  const httpsUrl = urls.find((url) => url.startsWith("https://") || url.startsWith("http://"));
+  const mailtoUrl = urls.find((url) => url.startsWith("mailto:"));
+
+  const url = httpsUrl || mailtoUrl || null;
+
+  return {
+    hasUnsubscribe: !!url,
+    url,
+  };
+}
+
 export async function getGmailClient(accessToken: string) {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -59,12 +91,16 @@ export async function getUnarchivedEmails(
           userId: "me",
           id: message.id!,
           format: "metadata",
-          metadataHeaders: ["From", "Subject", "Date", "To"],
+          metadataHeaders: ["From", "Subject", "Date", "To", "List-Unsubscribe"],
         });
 
         const headers = emailData.data.payload?.headers || [];
         const getHeader = (name: string) =>
           headers.find((h) => h.name === name)?.value || "";
+
+        // Parse List-Unsubscribe header
+        const listUnsubscribe = getHeader("List-Unsubscribe");
+        const unsubscribeData = parseListUnsubscribe(listUnsubscribe);
 
         return {
           id: emailData.data.id!,
@@ -74,6 +110,8 @@ export async function getUnarchivedEmails(
           to: getHeader("To"),
           date: new Date(parseInt(emailData.data.internalDate || "0")),
           snippet: emailData.data.snippet || "",
+          hasUnsubscribe: unsubscribeData.hasUnsubscribe,
+          unsubscribeUrl: unsubscribeData.url,
         };
       })
     );

@@ -34,8 +34,8 @@ export async function POST(request: Request) {
       date: email.date,
       archivedAt: null,
       deletedAt: null,
-      hasUnsubscribe: false,
-      unsubscribeUrl: null,
+      hasUnsubscribe: email.hasUnsubscribe || false,
+      unsubscribeUrl: email.unsubscribeUrl || null,
     }));
 
     if (emailRecords.length > 0) {
