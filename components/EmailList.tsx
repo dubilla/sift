@@ -13,6 +13,9 @@ interface Thread {
   snippet: string;
   date: string;
   messageCount: number;
+  hasUnsubscribe: boolean;
+  unsubscribeUrl: string | null;
+  latestEmailId: string;
 }
 
 interface EmailMessageData {
@@ -34,6 +37,7 @@ export default function EmailList() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [archivingIds, setArchivingIds] = useState<Set<string>>(new Set());
+  const [unsubscribingIds, setUnsubscribingIds] = useState<Set<string>>(new Set());
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const [threadMessages, setThreadMessages] = useState<Record<string, EmailMessageData[]>>({});
   const [loadingThreads, setLoadingThreads] = useState<Set<string>>(new Set());
@@ -92,6 +96,44 @@ export default function EmailList() {
       setArchivingIds((prev) => {
         const next = new Set(prev);
         next.delete(threadId);
+        return next;
+      });
+    }
+  };
+
+  const handleUnsubscribe = async (emailId: string, threadId: string) => {
+    setUnsubscribingIds((prev) => new Set(prev).add(emailId));
+
+    const originalThreads = [...threads];
+    setThreads((prev) => prev.filter((t) => t.threadId !== threadId));
+
+    try {
+      const response = await fetch(`/api/emails/${emailId}/unsubscribe`, {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to unsubscribe");
+      }
+
+      if (data.requiresMailto) {
+        // Restore thread and open mailto link
+        setThreads(originalThreads);
+        window.location.href = data.mailtoUrl;
+        return;
+      }
+
+      window.dispatchEvent(new CustomEvent("emailArchived"));
+    } catch (err) {
+      setThreads(originalThreads);
+      setError(err instanceof Error ? err.message : "Failed to unsubscribe");
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setUnsubscribingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(emailId);
         return next;
       });
     }
@@ -390,6 +432,7 @@ export default function EmailList() {
           {threads.map((thread, index) => {
           const sender = parseFromHeader(thread.from);
           const isArchiving = archivingIds.has(thread.threadId);
+          const isUnsubscribing = unsubscribingIds.has(thread.latestEmailId);
           const isExpanded = expandedThreads.has(thread.threadId);
           const isSelected = selectedThreadIds.has(thread.threadId);
           return (
@@ -450,6 +493,28 @@ export default function EmailList() {
                             strokeLinejoin="round"
                             strokeWidth={2}
                             d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                    {thread.hasUnsubscribe && thread.unsubscribeUrl && (
+                      <button
+                        onClick={() => handleUnsubscribe(thread.latestEmailId, thread.threadId)}
+                        disabled={isUnsubscribing}
+                        className="p-1.5 sm:p-2 text-orange-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Unsubscribe and archive"
+                      >
+                        <svg
+                          className="w-4 h-4 sm:w-5 sm:h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
                           />
                         </svg>
                       </button>
