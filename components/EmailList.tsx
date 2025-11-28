@@ -293,9 +293,13 @@ export default function EmailList() {
   useEffect(() => {
     async function initialize() {
       try {
-        await fetchThreads(1, false);
+        const response = await fetch('/api/threads?page=1&limit=100');
+        const data = await response.json();
 
-        if (threads.length > 0) {
+        if (data.threads && data.threads.length > 0) {
+          setThreads(data.threads);
+          setHasMore(data.hasMore);
+          setPage(1);
           setLoading(false);
           startSync();
         } else {

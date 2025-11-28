@@ -23,6 +23,7 @@ export async function GET(
     const threadEmails = await db
       .select({
         id: emails.id,
+        externalId: emails.externalId,
         date: emails.date,
         archivedAt: emails.archivedAt,
       })
@@ -49,9 +50,10 @@ export async function GET(
     // Fetch full email bodies from Gmail API
     const messages = await Promise.all(
       threadEmails.map(async (email) => {
-        const fullEmail = await getFullEmail(accessToken, email.id);
+        const fullEmail = await getFullEmail(accessToken, email.externalId);
         return {
           ...fullEmail,
+          id: email.id,
           archivedAt: email.archivedAt,
         };
       })
