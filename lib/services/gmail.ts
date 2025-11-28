@@ -5,7 +5,7 @@ import { google } from "googleapis";
  * Format: <https://example.com/unsubscribe>, <mailto:unsub@example.com>
  * Preference: https > mailto
  */
-function parseListUnsubscribe(header: string): {
+export function parseListUnsubscribe(header: string): {
   hasUnsubscribe: boolean;
   url: string | null;
 } {
