@@ -52,30 +52,23 @@ async function migrateToUUIDs() {
         const oldId = email.id;
         const newUuid = crypto.randomUUID();
 
-        // Use a transaction to ensure both updates succeed or fail together
-        await db.execute(sql`BEGIN`);
-
-        try {
+        // Use Drizzle's transaction API to ensure both updates succeed or fail together
+        await db.transaction(async (tx) => {
           // Update activityLog references first
-          await db.execute(
+          await tx.execute(
             sql`UPDATE activity_log SET email_id = ${newUuid} WHERE email_id = ${oldId}`
           );
 
           // Then update the email itself
-          await db.execute(
+          await tx.execute(
             sql`UPDATE emails SET id = ${newUuid} WHERE id = ${oldId}`
           );
+        });
 
-          await db.execute(sql`COMMIT`);
+        migrated++;
 
-          migrated++;
-
-          if (migrated % 50 === 0) {
-            console.log(`Progress: ${migrated}/${emailRows.length} emails migrated`);
-          }
-        } catch (error) {
-          await db.execute(sql`ROLLBACK`);
-          throw error;
+        if (migrated % 50 === 0) {
+          console.log(`Progress: ${migrated}/${emailRows.length} emails migrated`);
         }
       }
     }
