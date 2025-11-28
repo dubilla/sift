@@ -210,3 +210,58 @@ export async function archiveEmail(accessToken: string, emailId: string) {
     throw error;
   }
 }
+
+export async function createFilter(
+  accessToken: string,
+  senderEmail: string,
+  applyToExisting: boolean = false
+) {
+  try {
+    const gmail = await getGmailClient(accessToken);
+
+    const response = await gmail.users.settings.filters.create({
+      userId: "me",
+      requestBody: {
+        criteria: {
+          from: senderEmail,
+        },
+        action: {
+          removeLabelIds: ["INBOX"],
+        },
+      },
+    });
+
+    // If user wants to apply filter to existing emails, archive all from this sender
+    if (applyToExisting) {
+      const existingEmails = await gmail.users.messages.list({
+        userId: "me",
+        q: `from:${senderEmail} in:inbox`,
+      });
+
+      if (existingEmails.data.messages) {
+        // Batch modify to archive existing emails from this sender
+        await gmail.users.messages.batchModify({
+          userId: "me",
+          requestBody: {
+            ids: existingEmails.data.messages.map((msg) => msg.id!),
+            removeLabelIds: ["INBOX"],
+          },
+        });
+      }
+    }
+
+    return {
+      id: response.data.id,
+      senderEmail,
+      archived: applyToExisting
+        ? (await gmail.users.messages.list({
+            userId: "me",
+            q: `from:${senderEmail} in:inbox`,
+          })).data.messages?.length || 0
+        : 0,
+    };
+  } catch (error) {
+    console.error("Error creating filter:", error);
+    throw error;
+  }
+}
