@@ -53,6 +53,36 @@ export async function GET(request: Request) {
           ORDER BY e2.date DESC
           LIMIT 1
         )`,
+        hasUnsubscribe: sql<boolean>`(
+          SELECT e2.has_unsubscribe
+          FROM emails e2
+          WHERE e2.thread_id = emails.thread_id
+            AND e2.user_id = emails.user_id
+            AND e2.archived_at IS NULL
+            AND e2.deleted_at IS NULL
+          ORDER BY e2.date DESC
+          LIMIT 1
+        )`,
+        unsubscribeUrl: sql<string | null>`(
+          SELECT e2.unsubscribe_url
+          FROM emails e2
+          WHERE e2.thread_id = emails.thread_id
+            AND e2.user_id = emails.user_id
+            AND e2.archived_at IS NULL
+            AND e2.deleted_at IS NULL
+          ORDER BY e2.date DESC
+          LIMIT 1
+        )`,
+        latestEmailId: sql<string>`(
+          SELECT e2.id
+          FROM emails e2
+          WHERE e2.thread_id = emails.thread_id
+            AND e2.user_id = emails.user_id
+            AND e2.archived_at IS NULL
+            AND e2.deleted_at IS NULL
+          ORDER BY e2.date DESC
+          LIMIT 1
+        )`,
         date: sql<Date>`MAX(${emails.date})`,
         messageCount: sql<number>`COUNT(*)`,
       })
