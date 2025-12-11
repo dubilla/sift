@@ -6,6 +6,7 @@ import EmailMessage from "./EmailMessage";
 import { useBackgroundSync } from "@/lib/hooks/useBackgroundSync";
 import { SyncProgress } from "./SyncProgress";
 import FilterModal from "./FilterModal";
+import CreateAsanaTaskModal from "./CreateAsanaTaskModal";
 
 interface Thread {
   threadId: string;
@@ -50,6 +51,13 @@ export default function EmailList() {
   const [bulkArchiving, setBulkArchiving] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [selectedSender, setSelectedSender] = useState<{ email: string; name: string } | null>(null);
+  const [asanaModalOpen, setAsanaModalOpen] = useState(false);
+  const [selectedEmailForTask, setSelectedEmailForTask] = useState<{
+    id: string;
+    subject: string;
+    from: string;
+    snippet: string;
+  } | null>(null);
 
   const { syncState, startSync } = useBackgroundSync();
 
@@ -146,6 +154,16 @@ export default function EmailList() {
     const { email, name } = parseFromHeader(fromHeader);
     setSelectedSender({ email, name });
     setFilterModalOpen(true);
+  };
+
+  const handleOpenAsanaModal = (thread: Thread) => {
+    setSelectedEmailForTask({
+      id: thread.latestEmailId,
+      subject: thread.subject,
+      from: thread.from,
+      snippet: thread.snippet,
+    });
+    setAsanaModalOpen(true);
   };
 
   const handleCreateFilter = async (applyToExisting: boolean) => {
@@ -572,6 +590,19 @@ export default function EmailList() {
                       </button>
                     )}
                     <button
+                      onClick={() => handleOpenAsanaModal(thread)}
+                      className="p-1.5 sm:p-2 text-orange-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                      title="Create Asana task"
+                    >
+                      <svg
+                        className="w-4 h-4 sm:w-5 sm:h-5"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3.75a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm-4.58 7.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm9.16 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5z" />
+                      </svg>
+                    </button>
+                    <button
                       onClick={() => handleOpenFilterModal(thread.from)}
                       className="p-1.5 sm:p-2 text-purple-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                       title="Create filter from sender"
@@ -666,6 +697,14 @@ export default function EmailList() {
         senderEmail={selectedSender?.email || ""}
         senderName={selectedSender?.name || ""}
         onConfirm={handleCreateFilter}
+      />
+      <CreateAsanaTaskModal
+        isOpen={asanaModalOpen}
+        onClose={() => setAsanaModalOpen(false)}
+        emailSubject={selectedEmailForTask?.subject || ""}
+        emailFrom={selectedEmailForTask?.from || ""}
+        emailSnippet={selectedEmailForTask?.snippet || ""}
+        emailId={selectedEmailForTask?.id || ""}
       />
     </>
   );

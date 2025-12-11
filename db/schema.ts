@@ -105,3 +105,30 @@ export const activityLog = pgTable("activity_log", {
   emailId: text("email_id").references(() => emails.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Asana integration tables
+export const asanaSettings = pgTable("asana_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  defaultWorkspaceGid: text("default_workspace_gid"),
+  defaultWorkspaceName: text("default_workspace_name"),
+  defaultProjectGid: text("default_project_gid"),
+  defaultProjectName: text("default_project_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const asanaTasks = pgTable("asana_tasks", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  emailId: text("email_id").references(() => emails.id),
+  asanaTaskGid: text("asana_task_gid").notNull(),
+  asanaTaskUrl: text("asana_task_url"),
+  taskName: text("task_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
