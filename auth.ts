@@ -9,6 +9,31 @@ import {
   verificationTokens,
 } from "@/db/schema";
 
+// Custom Asana OAuth provider
+const Asana = {
+  id: "asana",
+  name: "Asana",
+  type: "oauth" as const,
+  authorization: {
+    url: "https://app.asana.com/-/oauth_authorize",
+    params: {
+      scope: "default",
+    },
+  },
+  token: "https://app.asana.com/-/oauth_token",
+  userinfo: "https://app.asana.com/api/1.0/users/me",
+  clientId: process.env.ASANA_CLIENT_ID,
+  clientSecret: process.env.ASANA_CLIENT_SECRET,
+  profile(profile: { data: { gid: string; name: string; email: string; photo?: { image_128x128?: string } } }) {
+    return {
+      id: profile.data.gid,
+      name: profile.data.name,
+      email: profile.data.email,
+      image: profile.data.photo?.image_128x128,
+    };
+  },
+};
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: DrizzleAdapter(db, {
     usersTable: users,
@@ -29,6 +54,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
       allowDangerousEmailAccountLinking: true,
     }),
+    Asana,
   ],
   callbacks: {
     async session({ session, user }) {
