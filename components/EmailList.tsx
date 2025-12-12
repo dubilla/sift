@@ -508,7 +508,7 @@ export default function EmailList() {
           return (
             <div key={thread.threadId} className={`transition-colors ${isSelected ? 'bg-blue-50' : ''}`}>
               <div className="p-4 hover:bg-gray-50">
-                <div className="flex items-start justify-between gap-2 sm:gap-4">
+                <div className="flex items-start gap-2 sm:gap-4">
                   <input
                     type="checkbox"
                     checked={isSelected}
@@ -519,31 +519,30 @@ export default function EmailList() {
                     }}
                     className="w-4 h-4 mt-1 text-blue-600 border-gray-300 rounded focus:ring-blue-500 flex-shrink-0"
                   />
-                  <div
-                    className="flex-1 min-w-0 cursor-pointer"
-                    onClick={() => toggleThread(thread.threadId)}
-                  >
-                    <div className="flex items-baseline gap-2 mb-1 flex-wrap">
-                      <span className="font-semibold text-gray-900 truncate">
-                        {sender.name}
-                      </span>
-                      {thread.messageCount > 1 && (
-                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0">
-                          {thread.messageCount}
-                        </span>
-                      )}
-                      <span className="text-xs text-gray-500 flex-shrink-0">
-                        {formatEmailDate(thread.date)}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-medium text-gray-900 mb-1 truncate">
-                      {thread.subject || "(no subject)"}
-                    </h3>
-                    <p className="text-sm text-gray-600 line-clamp-2">
-                      {thread.snippet}
-                    </p>
-                  </div>
-                  <div className="flex gap-1 sm:gap-2 flex-shrink-0">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div
+                        className="flex-1 min-w-0 cursor-pointer"
+                        onClick={() => toggleThread(thread.threadId)}
+                      >
+                        <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                          <span className="font-semibold text-gray-900 truncate">
+                            {sender.name}
+                          </span>
+                          {thread.messageCount > 1 && (
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                              {thread.messageCount}
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-500 flex-shrink-0">
+                            {formatEmailDate(thread.date)}
+                          </span>
+                        </div>
+                        <h3 className="text-sm font-medium text-gray-900 mb-1 truncate">
+                          {thread.subject || "(no subject)"}
+                        </h3>
+                      </div>
+                      <div className="flex gap-1 sm:gap-2 flex-shrink-0">
                     {thread.messageCount > 1 && (
                       <button
                         onClick={() => toggleThread(thread.threadId)}
@@ -641,6 +640,16 @@ export default function EmailList() {
                         />
                       </svg>
                     </button>
+                      </div>
+                    </div>
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => toggleThread(thread.threadId)}
+                    >
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {thread.snippet}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
