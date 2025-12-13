@@ -97,6 +97,14 @@ export async function getValidAccessTokenForProvider(
     if (!response.ok) {
       const error = await response.text();
       console.error(`[${provider}] Token refresh failed with status ${response.status}: ${error}`);
+
+      // Check if this is an invalid_grant error (revoked/expired refresh token)
+      if (error.includes("invalid_grant")) {
+        throw new Error(
+          `${provider} refresh token has been revoked or expired. Please sign out and sign back in to re-authenticate.`
+        );
+      }
+
       throw new Error(`Failed to refresh ${provider} token: ${error}`);
     }
 
@@ -117,10 +125,7 @@ export async function getValidAccessTokenForProvider(
     return tokens.access_token;
   } catch (error) {
     console.error(`[${provider}] Error refreshing access token:`, error);
-    console.error(`[${provider}] Falling back to existing token (may be expired)`);
-    // If refresh fails, return the existing token anyway
-    // The API will return a proper error if it's truly invalid
-    return account.access_token;
+    throw error;
   }
 }
 

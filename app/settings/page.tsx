@@ -1,7 +1,8 @@
-import { auth } from "@/auth";
+import { auth, signOut } from "@/auth";
 import { redirect } from "next/navigation";
 import AsanaSettings from "@/components/AsanaSettings";
 import Link from "next/link";
+import { SignOutButton } from "@/components/SignOutButton";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -41,6 +42,22 @@ export default async function SettingsPage() {
 
         <div className="space-y-6">
           <AsanaSettings />
+
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Account
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Signed in as {session.user?.email}
+                </p>
+              </div>
+              <div className="pt-4 border-t border-gray-200">
+                <SignOutButton />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
