@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { emails } from "@/db/schema";
+import { emails, emailTags, tags } from "@/db/schema";
 import { and, eq, isNull, desc, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -17,6 +17,46 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "100");
     const offset = (page - 1) * limit;
+    const tagFilter = searchParams.get("tag"); // Filter by tag name
+
+    // Build the base query conditions
+    let whereCondition = and(
+      eq(emails.userId, session.user.id),
+      isNull(emails.archivedAt),
+      isNull(emails.deletedAt)
+    );
+
+    // If filtering by tag, we need to get the email IDs that have that tag
+    let taggedEmailIds: string[] | null = null;
+    if (tagFilter) {
+      // Find the tag
+      const tag = await db
+        .select()
+        .from(tags)
+        .where(eq(tags.name, tagFilter))
+        .limit(1);
+
+      if (tag.length === 0) {
+        return NextResponse.json({ threads: [], page, limit, hasMore: false });
+      }
+
+      // Get email IDs with this tag (confidence >= 0.7)
+      const taggedEmails = await db
+        .select({ emailId: emailTags.emailId })
+        .from(emailTags)
+        .where(
+          and(
+            eq(emailTags.tagId, tag[0].id),
+            sql`${emailTags.confidence} >= 0.7`
+          )
+        );
+
+      taggedEmailIds = taggedEmails.map((e) => e.emailId);
+
+      if (taggedEmailIds.length === 0) {
+        return NextResponse.json({ threads: [], page, limit, hasMore: false });
+      }
+    }
 
     // Query to get threads with latest message metadata and message count
     // Using FIRST_VALUE window function would be better, but keeping subqueries for compatibility
@@ -83,16 +123,69 @@ export async function GET(request: Request) {
           ORDER BY e2.date DESC
           LIMIT 1
         )`,
+        // Get smart tag info for the latest email
+        smartTag: sql<string | null>`(
+          SELECT t.name
+          FROM email_tags et
+          JOIN tags t ON et.tag_id = t.id
+          WHERE et.email_id = (
+            SELECT e2.id
+            FROM emails e2
+            WHERE e2.thread_id = emails.thread_id
+              AND e2.user_id = emails.user_id
+              AND e2.archived_at IS NULL
+              AND e2.deleted_at IS NULL
+            ORDER BY e2.date DESC
+            LIMIT 1
+          )
+          AND et.confidence >= 0.7
+          LIMIT 1
+        )`,
+        smartTagIcon: sql<string | null>`(
+          SELECT t.icon
+          FROM email_tags et
+          JOIN tags t ON et.tag_id = t.id
+          WHERE et.email_id = (
+            SELECT e2.id
+            FROM emails e2
+            WHERE e2.thread_id = emails.thread_id
+              AND e2.user_id = emails.user_id
+              AND e2.archived_at IS NULL
+              AND e2.deleted_at IS NULL
+            ORDER BY e2.date DESC
+            LIMIT 1
+          )
+          AND et.confidence >= 0.7
+          LIMIT 1
+        )`,
+        smartTagColor: sql<string | null>`(
+          SELECT t.color
+          FROM email_tags et
+          JOIN tags t ON et.tag_id = t.id
+          WHERE et.email_id = (
+            SELECT e2.id
+            FROM emails e2
+            WHERE e2.thread_id = emails.thread_id
+              AND e2.user_id = emails.user_id
+              AND e2.archived_at IS NULL
+              AND e2.deleted_at IS NULL
+            ORDER BY e2.date DESC
+            LIMIT 1
+          )
+          AND et.confidence >= 0.7
+          LIMIT 1
+        )`,
         date: sql<Date>`MAX(${emails.date})`,
         messageCount: sql<number>`COUNT(*)`,
       })
       .from(emails)
       .where(
-        and(
-          eq(emails.userId, session.user.id),
-          isNull(emails.archivedAt),
-          isNull(emails.deletedAt)
-        )
+        taggedEmailIds
+          ? and(
+              whereCondition,
+              sql`${emails.id} IN (${sql.raw(taggedEmailIds.map((id) => `'${id}'`).join(","))})`
+            )
+          : whereCondition
       )
       .groupBy(emails.threadId, emails.userId)
       .orderBy(desc(sql`MAX(${emails.date})`))

@@ -18,6 +18,18 @@ interface Thread {
   hasUnsubscribe: boolean;
   unsubscribeUrl: string | null;
   latestEmailId: string;
+  smartTag: string | null;
+  smartTagIcon: string | null;
+  smartTagColor: string | null;
+}
+
+interface TagStats {
+  id: string;
+  name: string;
+  displayName: string;
+  color: string | null;
+  icon: string | null;
+  count: number;
 }
 
 interface EmailMessageData {
@@ -58,12 +70,49 @@ export default function EmailList() {
     from: string;
     snippet: string;
   } | null>(null);
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [tagStats, setTagStats] = useState<TagStats[]>([]);
+  const [classifying, setClassifying] = useState(false);
 
   const { syncState, startSync } = useBackgroundSync();
 
-  const fetchThreads = async (pageNum: number = 1, append: boolean = false) => {
+  const fetchTagStats = async () => {
     try {
-      const response = await fetch(`/api/threads?page=${pageNum}&limit=100`);
+      const response = await fetch("/api/emails/classify");
+      const data = await response.json();
+      if (data.tags) {
+        setTagStats(data.tags);
+      }
+    } catch (err) {
+      console.error("Failed to fetch tag stats:", err);
+    }
+  };
+
+  const handleClassifyEmails = async () => {
+    setClassifying(true);
+    try {
+      const response = await fetch("/api/emails/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 50 }),
+      });
+      await response.json();
+      await fetchTagStats();
+      await fetchThreads(1, false);
+    } catch (err) {
+      console.error("Failed to classify emails:", err);
+    } finally {
+      setClassifying(false);
+    }
+  };
+
+  const fetchThreads = async (pageNum: number = 1, append: boolean = false, tagFilter?: string | null) => {
+    try {
+      const tag = tagFilter !== undefined ? tagFilter : activeTagFilter;
+      const url = tag
+        ? `/api/threads?page=${pageNum}&limit=100&tag=${tag}`
+        : `/api/threads?page=${pageNum}&limit=100`;
+      const response = await fetch(url);
       const data = await response.json();
       if (data.threads) {
         setThreads(prev => append ? [...prev, ...data.threads] : data.threads);
@@ -74,6 +123,13 @@ export default function EmailList() {
       setError(err instanceof Error ? err.message : "Failed to fetch threads");
       setTimeout(() => setError(null), 5000);
     }
+  };
+
+  const handleTagFilterChange = async (tagName: string | null) => {
+    setActiveTagFilter(tagName);
+    setSelectedThreadIds(new Set());
+    setPage(1);
+    await fetchThreads(1, false, tagName);
   };
 
   const loadMore = async () => {
@@ -368,6 +424,7 @@ export default function EmailList() {
           setPage(1);
           setLoading(false);
           startSync();
+          fetchTagStats();
         } else {
           setSyncing(true);
           const syncResponse = await fetch("/api/emails/sync", {
@@ -453,6 +510,64 @@ export default function EmailList() {
         totalCount={syncState.totalCount}
         isSyncing={syncState.isSyncing}
       />
+      {/* Smart Tag Filter Tabs */}
+      <div className="bg-white rounded-lg shadow-md mb-4 p-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => handleTagFilterChange(null)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeTagFilter === null
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            All
+          </button>
+          {tagStats.map((tag) => (
+            <button
+              key={tag.id}
+              onClick={() => handleTagFilterChange(tag.name)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                activeTagFilter === tag.name
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              <span>{tag.icon}</span>
+              <span>{tag.displayName}</span>
+              {tag.count > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+                  activeTagFilter === tag.name
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 text-gray-600"
+                }`}>
+                  {tag.count}
+                </span>
+              )}
+            </button>
+          ))}
+          <button
+            onClick={handleClassifyEmails}
+            disabled={classifying}
+            className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            title="Classify untagged emails using AI"
+          >
+            {classifying ? (
+              <>
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-purple-600 border-r-transparent"></span>
+                <span>Classifying...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                <span>Classify</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         {threads.length > 0 && (
           <div className="sticky top-0 z-10 bg-gray-100 border-b border-gray-300 p-4">
@@ -526,6 +641,14 @@ export default function EmailList() {
                         onClick={() => toggleThread(thread.threadId)}
                       >
                         <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                          {thread.smartTag && thread.smartTagIcon && (
+                            <span
+                              className="text-sm flex-shrink-0"
+                              title={thread.smartTag}
+                            >
+                              {thread.smartTagIcon}
+                            </span>
+                          )}
                           <span className="font-semibold text-gray-900 truncate">
                             {sender.name}
                           </span>

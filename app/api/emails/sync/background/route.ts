@@ -36,8 +36,12 @@ export async function POST(request: Request) {
       date: email.date,
       archivedAt: null,
       deletedAt: null,
-      hasUnsubscribe: false,
-      unsubscribeUrl: null,
+      hasUnsubscribe: email.hasUnsubscribe || false,
+      unsubscribeUrl: email.unsubscribeUrl || null,
+      // Smart tagging metadata
+      listId: email.listId,
+      isNoreply: email.isNoreply,
+      recipientCount: email.recipientCount,
     }));
 
     if (emailRecords.length > 0) {

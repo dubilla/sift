@@ -32,6 +32,34 @@ export function parseListUnsubscribe(header: string): {
   };
 }
 
+/**
+ * Check if email address appears to be a noreply/automated sender
+ */
+export function isNoreplyAddress(from: string): boolean {
+  const lowerFrom = from.toLowerCase();
+  return (
+    lowerFrom.includes("noreply") ||
+    lowerFrom.includes("no-reply") ||
+    lowerFrom.includes("donotreply") ||
+    lowerFrom.includes("do-not-reply") ||
+    lowerFrom.includes("notifications@") ||
+    lowerFrom.includes("notification@") ||
+    lowerFrom.includes("mailer-daemon") ||
+    lowerFrom.includes("postmaster@")
+  );
+}
+
+/**
+ * Count recipients from To header
+ * Format: "Name <email@example.com>, Name2 <email2@example.com>"
+ */
+export function countRecipients(toHeader: string): number {
+  if (!toHeader) return 1;
+  // Count email addresses by looking for @ symbols or comma-separated entries
+  const emails = toHeader.split(",").filter((s) => s.trim().length > 0);
+  return Math.max(1, emails.length);
+}
+
 export async function getGmailClient(accessToken: string) {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -91,7 +119,7 @@ export async function getUnarchivedEmails(
           userId: "me",
           id: message.id!,
           format: "metadata",
-          metadataHeaders: ["From", "Subject", "Date", "To", "List-Unsubscribe"],
+          metadataHeaders: ["From", "Subject", "Date", "To", "List-Unsubscribe", "List-Id"],
         });
 
         const headers = emailData.data.payload?.headers || [];
@@ -102,16 +130,23 @@ export async function getUnarchivedEmails(
         const listUnsubscribe = getHeader("List-Unsubscribe");
         const unsubscribeData = parseListUnsubscribe(listUnsubscribe);
 
+        const from = getHeader("From");
+        const to = getHeader("To");
+
         return {
           id: emailData.data.id!,
           threadId: emailData.data.threadId!,
           subject: getHeader("Subject"),
-          from: getHeader("From"),
-          to: getHeader("To"),
+          from,
+          to,
           date: new Date(parseInt(emailData.data.internalDate || "0")),
           snippet: emailData.data.snippet || "",
           hasUnsubscribe: unsubscribeData.hasUnsubscribe,
           unsubscribeUrl: unsubscribeData.url,
+          // Smart tagging metadata
+          listId: getHeader("List-Id") || null,
+          isNoreply: isNoreplyAddress(from),
+          recipientCount: countRecipients(to),
         };
       })
     );
