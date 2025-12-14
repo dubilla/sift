@@ -1,8 +1,9 @@
-import { auth, signOut } from "@/auth";
+import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import AsanaSettings from "@/components/AsanaSettings";
 import Link from "next/link";
 import { SignOutButton } from "@/components/SignOutButton";
+import { ReconnectGoogleButton } from "@/components/ReconnectGoogleButton";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -52,6 +53,14 @@ export default async function SettingsPage() {
                 <p className="text-sm text-gray-600 mb-2">
                   Signed in as {session.user?.email}
                 </p>
+              </div>
+              <div className="pt-4 border-t border-gray-200">
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-2">
+                    Having issues with email sync? Re-connect your Google account to refresh permissions.
+                  </p>
+                  <ReconnectGoogleButton />
+                </div>
               </div>
               <div className="pt-4 border-t border-gray-200">
                 <SignOutButton />

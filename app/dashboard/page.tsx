@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import StatsPanel from "@/components/StatsPanel";
 import EmailList from "@/components/EmailList";
 import Link from "next/link";
+import { TokenExpiredBanner } from "@/components/TokenExpiredBanner";
 
 export default async function Dashboard() {
   const session = await auth();
@@ -13,6 +14,7 @@ export default async function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <TokenExpiredBanner />
       <StatsPanel />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
