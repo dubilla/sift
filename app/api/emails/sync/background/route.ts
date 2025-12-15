@@ -36,8 +36,12 @@ export async function POST(request: Request) {
       date: email.date,
       archivedAt: null,
       deletedAt: null,
-      hasUnsubscribe: false,
-      unsubscribeUrl: null,
+      hasUnsubscribe: email.hasUnsubscribe || false,
+      unsubscribeUrl: email.unsubscribeUrl || null,
+      // Smart tagging metadata
+      listId: email.listId,
+      isNoreply: email.isNoreply,
+      recipientCount: email.recipientCount,
     }));
 
     if (emailRecords.length > 0) {
@@ -78,9 +82,14 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Error in /api/emails/sync/background:", error);
+
+    // Check if it's a token/auth error
+    const errorMessage = error instanceof Error ? error.message : "Failed to sync emails";
+    const isAuthError = errorMessage.includes("refresh") || errorMessage.includes("authenticate");
+
     return NextResponse.json(
-      { error: "Failed to sync emails" },
-      { status: 500 }
+      { error: errorMessage },
+      { status: isAuthError ? 401 : 500 }
     );
   }
 }

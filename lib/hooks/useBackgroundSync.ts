@@ -24,7 +24,20 @@ export function useBackgroundSync() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to sync emails");
+        const data = await response.json();
+        const errorMessage = data.error || "Failed to sync emails";
+
+        // If it's an auth error (401), stop immediately
+        if (response.status === 401) {
+          setSyncState((prev) => ({
+            ...prev,
+            isSyncing: false,
+            error: errorMessage,
+          }));
+          throw new Error(errorMessage);
+        }
+
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -58,7 +71,20 @@ export function useBackgroundSync() {
   }, []);
 
   const startSync = useCallback(async () => {
-    setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
+    // Don't start a new sync if one is already running
+    let shouldSync = false;
+    setSyncState((prev) => {
+      if (prev.isSyncing) {
+        console.log("Sync already in progress, skipping");
+        return prev;
+      }
+      shouldSync = true;
+      return { ...prev, isSyncing: true, error: null };
+    });
+
+    if (!shouldSync) {
+      return;
+    }
 
     // First, initialize the total count
     try {

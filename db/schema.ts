@@ -6,6 +6,8 @@ import {
   integer,
   boolean,
   primaryKey,
+  real,
+  unique,
 } from "drizzle-orm/pg-core";
 
 // NextAuth tables
@@ -94,6 +96,10 @@ export const emails = pgTable("emails", {
   hasUnsubscribe: boolean("has_unsubscribe").default(false),
   unsubscribeUrl: text("unsubscribe_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Smart tagging metadata
+  listId: text("list_id"), // List-Id header for mailing list detection
+  isNoreply: boolean("is_noreply").default(false), // Sender is noreply/donotreply
+  recipientCount: integer("recipient_count").default(1), // Number of recipients
 });
 
 export const activityLog = pgTable("activity_log", {
@@ -132,3 +138,38 @@ export const asanaTasks = pgTable("asana_tasks", {
   taskName: text("task_name").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Smart tagging tables
+export const tags = pgTable("tags", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(), // 'archivable', 'quick_action', 'asana_task', 'unsubscribable'
+  displayName: text("display_name").notNull(), // 'Archive', 'Quick Action', etc.
+  description: text("description"), // Help text for the tag
+  color: text("color"), // Tailwind color class or hex
+  icon: text("icon"), // Emoji or icon identifier
+  sortOrder: integer("sort_order").default(0), // For consistent UI ordering
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const emailTags = pgTable(
+  "email_tags",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    emailId: text("email_id")
+      .notNull()
+      .references(() => emails.id, { onDelete: "cascade" }),
+    tagId: text("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    source: text("source").notNull(), // 'rule' | 'llm' | 'user'
+    confidence: real("confidence"), // 0-1, null for user-applied tags
+    classifiedAt: timestamp("classified_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqueEmailTag: unique().on(table.emailId, table.tagId),
+  })
+);

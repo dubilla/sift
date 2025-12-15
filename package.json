@@ -13,7 +13,8 @@
     "db:migrate": "tsx db/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:backfill-unsubscribe": "tsx db/backfill-unsubscribe.ts"
+    "db:backfill-unsubscribe": "tsx db/backfill-unsubscribe.ts",
+    "db:seed-tags": "tsx db/seed-tags.ts"
   },
   "dependencies": {
     "@auth/core": "^0.41.0",
