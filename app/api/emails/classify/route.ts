@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { emails, emailTags, tags } from "@/db/schema";
 import { classifyEmail, CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
 import { NextResponse } from "next/server";
-import { eq, and, isNull, inArray } from "drizzle-orm";
+import { eq, and, isNull, inArray, desc } from "drizzle-orm";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
               : undefined
           )
         )
+        .orderBy(desc(emails.date))
         .limit(limit * 2); // Fetch extra to filter
 
       // Filter out already classified
@@ -133,6 +134,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       classified: results.filter((r) => r.tag !== null).length,
+      total: emailsToClassify.length,
       results,
     });
   } catch (error) {
