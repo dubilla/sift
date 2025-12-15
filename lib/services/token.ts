@@ -117,10 +117,9 @@ export async function getValidAccessTokenForProvider(
     return tokens.access_token;
   } catch (error) {
     console.error(`[${provider}] Error refreshing access token:`, error);
-    console.error(`[${provider}] Falling back to existing token (may be expired)`);
-    // If refresh fails, return the existing token anyway
-    // The API will return a proper error if it's truly invalid
-    return account.access_token;
+    throw new Error(
+      `Failed to refresh ${provider} token. Please re-authenticate.`
+    );
   }
 }
 

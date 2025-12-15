@@ -73,8 +73,13 @@ export default function EmailList() {
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [tagStats, setTagStats] = useState<TagStats[]>([]);
   const [classifying, setClassifying] = useState(false);
+  const [classifyStatus, setClassifyStatus] = useState<{
+    stage: "idle" | "classifying" | "success";
+    total: number;
+  }>({ stage: "idle", total: 0 });
 
   const { syncState, startSync } = useBackgroundSync();
+  const hasInitialized = useRef(false);
 
   const fetchTagStats = async () => {
     try {
@@ -90,17 +95,28 @@ export default function EmailList() {
 
   const handleClassifyEmails = async () => {
     setClassifying(true);
+    setClassifyStatus({ stage: "classifying", total: 50 });
     try {
       const response = await fetch("/api/emails/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limit: 50 }),
       });
-      await response.json();
+      const data = await response.json();
+
+      // Show success message
+      setClassifyStatus({ stage: "success", total: data.total || 0 });
+
       await fetchTagStats();
       await fetchThreads(1, false);
+
+      // Reset to idle after 3 seconds
+      setTimeout(() => {
+        setClassifyStatus({ stage: "idle", total: 0 });
+      }, 3000);
     } catch (err) {
       console.error("Failed to classify emails:", err);
+      setClassifyStatus({ stage: "idle", total: 0 });
     } finally {
       setClassifying(false);
     }
@@ -413,6 +429,12 @@ export default function EmailList() {
   };
 
   useEffect(() => {
+    // Only initialize once
+    if (hasInitialized.current) {
+      return;
+    }
+    hasInitialized.current = true;
+
     async function initialize() {
       try {
         const response = await fetch('/api/threads?page=1&limit=100');
@@ -448,7 +470,7 @@ export default function EmailList() {
     }
 
     initialize();
-  }, [startSync]);
+  }, []);
 
 
   if (loading || syncing) {
@@ -549,13 +571,24 @@ export default function EmailList() {
           <button
             onClick={handleClassifyEmails}
             disabled={classifying}
-            className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            className={`ml-auto px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
+              classifyStatus.stage === "success"
+                ? "bg-green-100 text-green-700"
+                : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+            }`}
             title="Classify untagged emails using AI"
           >
-            {classifying ? (
+            {classifyStatus.stage === "classifying" ? (
               <>
                 <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-purple-600 border-r-transparent"></span>
-                <span>Classifying...</span>
+                <span>Classifying the latest {classifyStatus.total} emails</span>
+              </>
+            ) : classifyStatus.stage === "success" ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Classified {classifyStatus.total} emails!</span>
               </>
             ) : (
               <>
