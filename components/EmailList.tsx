@@ -532,8 +532,42 @@ export default function EmailList() {
         totalCount={syncState.totalCount}
         isSyncing={syncState.isSyncing}
       />
-      {/* Smart Tag Filter Tabs */}
-      <div className="bg-white rounded-lg shadow-md mb-4 p-2">
+      <div className="mb-1 flex justify-end">
+        <button
+          onClick={handleClassifyEmails}
+          disabled={classifying}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
+            classifyStatus.stage === "success"
+              ? "bg-green-100 text-green-700"
+              : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+          }`}
+          title="Classify untagged emails using AI"
+        >
+          {classifyStatus.stage === "classifying" ? (
+            <>
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-purple-600 border-r-transparent"></span>
+              <span className="hidden sm:inline">Classifying the latest {classifyStatus.total} emails</span>
+              <span className="sm:hidden">Classifying...</span>
+            </>
+          ) : classifyStatus.stage === "success" ? (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="hidden sm:inline">Classified {classifyStatus.total} emails!</span>
+              <span className="sm:hidden">Done!</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <span>Classify</span>
+            </>
+          )}
+        </button>
+      </div>
+      <div className="bg-white rounded-lg shadow-md mb-2 p-2">
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => handleTagFilterChange(null)}
@@ -568,37 +602,6 @@ export default function EmailList() {
               )}
             </button>
           ))}
-          <button
-            onClick={handleClassifyEmails}
-            disabled={classifying}
-            className={`ml-auto px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
-              classifyStatus.stage === "success"
-                ? "bg-green-100 text-green-700"
-                : "bg-purple-100 text-purple-700 hover:bg-purple-200"
-            }`}
-            title="Classify untagged emails using AI"
-          >
-            {classifyStatus.stage === "classifying" ? (
-              <>
-                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-purple-600 border-r-transparent"></span>
-                <span>Classifying the latest {classifyStatus.total} emails</span>
-              </>
-            ) : classifyStatus.stage === "success" ? (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Classified {classifyStatus.total} emails!</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                <span>Classify</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
       <div className="bg-white rounded-lg shadow-md overflow-hidden">

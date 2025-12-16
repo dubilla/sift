@@ -17,8 +17,8 @@ export default async function Dashboard() {
       <TokenExpiredBanner />
       <StatsPanel />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8 flex items-start justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="mb-4 flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
             <p className="text-gray-600 mt-1">
@@ -52,12 +52,7 @@ export default async function Dashboard() {
           </Link>
         </div>
 
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            Your Emails
-          </h2>
-          <EmailList />
-        </div>
+        <EmailList />
       </div>
     </div>
   );
