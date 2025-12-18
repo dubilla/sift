@@ -23,6 +23,10 @@ vi.mock("@/db/schema", () => ({
     action: "action",
     createdAt: "createdAt",
   },
+  userStats: {
+    userId: "userId",
+    totalUnarchivedCount: "totalUnarchivedCount",
+  },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -62,6 +66,7 @@ describe("GET /api/stats", () => {
     const mockTodayResult = [{ count: 5 }];
     const mockWeekResult = [{ count: 23 }];
     const mockRecentResult = [{ count: 10 }]; // 10 emails in last 5 minutes = 2.0 emails/min
+    const mockUserStatsResult = [{ totalUnarchivedCount: 50 }];
 
     let callCount = 0;
     const mockWhere = vi.fn().mockImplementation(() => {
@@ -70,6 +75,7 @@ describe("GET /api/stats", () => {
       if (callCount === 2) return Promise.resolve(mockTodayResult);
       if (callCount === 3) return Promise.resolve(mockWeekResult);
       if (callCount === 4) return Promise.resolve(mockRecentResult);
+      if (callCount === 5) return Promise.resolve(mockUserStatsResult);
       return Promise.resolve([]);
     });
 
@@ -82,11 +88,13 @@ describe("GET /api/stats", () => {
     expect(response.status).toBe(200);
     expect(data).toEqual({
       totalUnarchived: 42,
+      totalUnarchivedCount: 50,
+      emailsInDatabase: 42,
       parsedToday: 5,
       parsedThisWeek: 23,
       velocity: 2.0,
     });
-    expect(db.select).toHaveBeenCalledTimes(4);
+    expect(db.select).toHaveBeenCalledTimes(5);
   });
 
   it("returns zeros when no emails exist", async () => {
@@ -95,7 +103,14 @@ describe("GET /api/stats", () => {
     } as any);
 
     const mockEmptyResult = [{ count: 0 }];
-    const mockWhere = vi.fn().mockResolvedValue(mockEmptyResult);
+    const mockEmptyUserStats = [{ totalUnarchivedCount: 0 }];
+
+    let callCount = 0;
+    const mockWhere = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 5) return Promise.resolve(mockEmptyUserStats);
+      return Promise.resolve(mockEmptyResult);
+    });
     const mockFrom = vi.fn(() => ({ where: mockWhere }));
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
@@ -105,6 +120,8 @@ describe("GET /api/stats", () => {
     expect(response.status).toBe(200);
     expect(data).toEqual({
       totalUnarchived: 0,
+      totalUnarchivedCount: 0,
+      emailsInDatabase: 0,
       parsedToday: 0,
       parsedThisWeek: 0,
       velocity: 0,
@@ -126,6 +143,8 @@ describe("GET /api/stats", () => {
     expect(response.status).toBe(200);
     expect(data).toEqual({
       totalUnarchived: 0,
+      totalUnarchivedCount: 0,
+      emailsInDatabase: 0,
       parsedToday: 0,
       parsedThisWeek: 0,
       velocity: 0,
@@ -142,6 +161,7 @@ describe("GET /api/stats", () => {
     const mockTodayResult = [{ count: 50 }];
     const mockWeekResult = [{ count: 150 }];
     const mockRecentResult = [{ count: 25 }];
+    const mockUserStatsResult = [{ totalUnarchivedCount: 120 }];
 
     let callCount = 0;
     const mockWhere = vi.fn().mockImplementation(() => {
@@ -150,6 +170,7 @@ describe("GET /api/stats", () => {
       if (callCount === 2) return Promise.resolve(mockTodayResult);
       if (callCount === 3) return Promise.resolve(mockWeekResult);
       if (callCount === 4) return Promise.resolve(mockRecentResult);
+      if (callCount === 5) return Promise.resolve(mockUserStatsResult);
       return Promise.resolve([]);
     });
 
@@ -173,6 +194,7 @@ describe("GET /api/stats", () => {
     const mockTodayResult = [{ count: 10 }];
     const mockWeekResult = [{ count: 30 }];
     const mockRecentResult = [{ count: 7 }];
+    const mockUserStatsResult = [{ totalUnarchivedCount: 55 }];
 
     let callCount = 0;
     const mockWhere = vi.fn().mockImplementation(() => {
@@ -181,6 +203,7 @@ describe("GET /api/stats", () => {
       if (callCount === 2) return Promise.resolve(mockTodayResult);
       if (callCount === 3) return Promise.resolve(mockWeekResult);
       if (callCount === 4) return Promise.resolve(mockRecentResult);
+      if (callCount === 5) return Promise.resolve(mockUserStatsResult);
       return Promise.resolve([]);
     });
 
@@ -204,6 +227,7 @@ describe("GET /api/stats", () => {
     const mockTodayResult = [{ count: 8 }]; // only archive actions today
     const mockWeekResult = [{ count: 20 }]; // only archive actions this week
     const mockRecentResult = [{ count: 3 }]; // only archive actions in last 5 min
+    const mockUserStatsResult = [{ totalUnarchivedCount: 35 }];
 
     let callCount = 0;
     const mockWhere = vi.fn().mockImplementation(() => {
@@ -212,6 +236,7 @@ describe("GET /api/stats", () => {
       if (callCount === 2) return Promise.resolve(mockTodayResult);
       if (callCount === 3) return Promise.resolve(mockWeekResult);
       if (callCount === 4) return Promise.resolve(mockRecentResult);
+      if (callCount === 5) return Promise.resolve(mockUserStatsResult);
       return Promise.resolve([]);
     });
 
@@ -276,6 +301,7 @@ describe("GET /api/stats", () => {
     const mockTodayResult = [{ count: 250 }]; // archived 250 today
     const mockWeekResult = [{ count: 1500 }]; // archived 1500 this week
     const mockRecentResult = [{ count: 50 }]; // 50 in last 5 min = 10.0/min
+    const mockUserStatsResult = [{ totalUnarchivedCount: 10 }];
 
     let callCount = 0;
     const mockWhere = vi.fn().mockImplementation(() => {
@@ -284,6 +310,7 @@ describe("GET /api/stats", () => {
       if (callCount === 2) return Promise.resolve(mockTodayResult);
       if (callCount === 3) return Promise.resolve(mockWeekResult);
       if (callCount === 4) return Promise.resolve(mockRecentResult);
+      if (callCount === 5) return Promise.resolve(mockUserStatsResult);
       return Promise.resolve([]);
     });
 
@@ -296,6 +323,8 @@ describe("GET /api/stats", () => {
     expect(response.status).toBe(200);
     expect(data).toEqual({
       totalUnarchived: 5,
+      totalUnarchivedCount: 10,
+      emailsInDatabase: 5,
       parsedToday: 250,
       parsedThisWeek: 1500,
       velocity: 10.0,

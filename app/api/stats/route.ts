@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { emails, activityLog } from "@/db/schema";
+import { emails, activityLog, userStats } from "@/db/schema";
 import { and, count, countDistinct, eq, gte, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -66,10 +66,20 @@ export async function GET() {
       );
 
     const recentCount = recentResult[0]?.count || 0;
-    const velocity = recentCount / 5; // emails per minute
+    const velocity = recentCount / 5;
+
+    const userStatsResult = await db
+      .select()
+      .from(userStats)
+      .where(eq(userStats.userId, session.user.id));
+
+    const totalUnarchivedCount = userStatsResult[0]?.totalUnarchivedCount || 0;
+    const emailsInDatabase = unarchivedResult[0]?.count || 0;
 
     return NextResponse.json({
-      totalUnarchived: unarchivedResult[0]?.count || 0,
+      totalUnarchived: emailsInDatabase,
+      totalUnarchivedCount,
+      emailsInDatabase,
       parsedToday: todayResult[0]?.count || 0,
       parsedThisWeek: weekResult[0]?.count || 0,
       velocity: Number(velocity.toFixed(1)),
