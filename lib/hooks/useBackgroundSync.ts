@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface SyncState {
   isSyncing: boolean;
@@ -14,6 +14,13 @@ export function useBackgroundSync() {
     totalCount: 0,
     error: null,
   });
+  const syncInProgressRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      syncInProgressRef.current = false;
+    };
+  }, []);
 
   const syncBatch = useCallback(async (pageToken?: string) => {
     try {
@@ -27,8 +34,8 @@ export function useBackgroundSync() {
         const data = await response.json();
         const errorMessage = data.error || "Failed to sync emails";
 
-        // If it's an auth error (401), stop immediately
         if (response.status === 401) {
+          syncInProgressRef.current = false;
           setSyncState((prev) => ({
             ...prev,
             isSyncing: false,
@@ -48,19 +55,18 @@ export function useBackgroundSync() {
         totalCount: data.totalCount,
       }));
 
-      // If there's more to sync, continue
       if (data.nextPageToken && !data.isComplete) {
-        // Small delay to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         await syncBatch(data.nextPageToken);
       } else {
-        // Sync complete - set isSyncing to false
+        syncInProgressRef.current = false;
         setSyncState((prev) => ({ ...prev, isSyncing: false }));
       }
 
       return data;
     } catch (error) {
       console.error("Background sync error:", error);
+      syncInProgressRef.current = false;
       setSyncState((prev) => ({
         ...prev,
         isSyncing: false,
@@ -71,31 +77,25 @@ export function useBackgroundSync() {
   }, []);
 
   const startSync = useCallback(async () => {
-    // Don't start a new sync if one is already running
-    let shouldSync = false;
-    setSyncState((prev) => {
-      if (prev.isSyncing) {
-        console.log("Sync already in progress, skipping");
-        return prev;
-      }
-      shouldSync = true;
-      return { ...prev, isSyncing: true, error: null };
-    });
-
-    if (!shouldSync) {
+    if (syncInProgressRef.current) {
+      console.log("Sync already in progress, skipping");
       return;
     }
 
-    // First, initialize the total count
+    syncInProgressRef.current = true;
+    setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
+
     try {
       await fetch("/api/emails/sync/init", { method: "POST" });
     } catch (error) {
       console.error("Failed to initialize sync:", error);
-      // Continue anyway - background sync will handle missing count gracefully
     }
 
-    // Then start syncing batches
-    await syncBatch();
+    try {
+      await syncBatch();
+    } catch (error) {
+      syncInProgressRef.current = false;
+    }
   }, [syncBatch]);
 
   return { syncState, startSync };
