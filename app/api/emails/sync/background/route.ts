@@ -4,7 +4,7 @@ import { emails, userStats } from "@/db/schema";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
-import { eq, and, isNull, count } from "drizzle-orm";
+import { eq, and, isNull, count, sql } from "drizzle-orm";
 
 export async function POST(request: Request) {
   try {
@@ -14,15 +14,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get valid access token (refreshes if expired)
     const accessToken = await getValidAccessToken(session.user.id);
 
-    // Parse request body for pagination params
+    const statsResult = await db
+      .select()
+      .from(userStats)
+      .where(eq(userStats.userId, session.user.id));
+
+    const lastSyncedAt = statsResult[0]?.lastSyncedAt;
+
     const body = await request.json().catch(() => ({}));
     const { pageToken } = body;
 
-    // Fetch next batch of emails
-    const result = await getUnarchivedEmails(accessToken, 100, pageToken);
+    const result = await getUnarchivedEmails(accessToken, 100, pageToken, lastSyncedAt || undefined);
 
     const emailRecords = result.emails.map((email) => ({
       id: crypto.randomUUID(),
@@ -65,25 +69,26 @@ export async function POST(request: Request) {
 
     const currentDbCount = dbCountResult[0]?.count || 0;
 
-    // Get total count from user_stats
-    const statsResult = await db
-      .select()
-      .from(userStats)
-      .where(eq(userStats.userId, session.user.id));
-
     const totalCount = statsResult[0]?.totalUnarchivedCount || 0;
+    const isComplete = !result.nextPageToken;
+
+    if (isComplete && emailRecords.length > 0) {
+      await db
+        .update(userStats)
+        .set({ lastSyncedAt: new Date() })
+        .where(eq(userStats.userId, session.user.id));
+    }
 
     return NextResponse.json({
       synced: emailRecords.length,
       nextPageToken: result.nextPageToken,
       currentCount: currentDbCount,
       totalCount,
-      isComplete: !result.nextPageToken,
+      isComplete,
     });
   } catch (error) {
     console.error("Error in /api/emails/sync/background:", error);
 
-    // Check if it's a token/auth error
     const errorMessage = error instanceof Error ? error.message : "Failed to sync emails";
     const isAuthError = errorMessage.includes("refresh") || errorMessage.includes("authenticate");
 
