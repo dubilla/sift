@@ -7,6 +7,7 @@ import { useBackgroundSync } from "@/lib/hooks/useBackgroundSync";
 import { SyncProgress } from "./SyncProgress";
 import FilterModal from "./FilterModal";
 import CreateAsanaTaskModal from "./CreateAsanaTaskModal";
+import SwipeableThreadRow from "./SwipeableThreadRow";
 
 interface Thread {
   threadId: string;
@@ -670,7 +671,12 @@ export default function EmailList() {
           const isExpanded = expandedThreads.has(thread.threadId);
           const isSelected = selectedThreadIds.has(thread.threadId);
           return (
-            <div key={thread.threadId} className={`transition-colors ${isSelected ? 'bg-blue-50' : ''}`}>
+            <SwipeableThreadRow
+              key={thread.threadId}
+              onArchive={() => handleArchiveThread(thread.threadId)}
+              isArchiving={isArchiving}
+              isSelected={isSelected}
+            >
               <div className="p-4 hover:bg-gray-50">
                 <div className="flex items-start gap-2 sm:gap-4">
                   <input
@@ -856,7 +862,7 @@ export default function EmailList() {
                   )}
                 </div>
               )}
-            </div>
+            </SwipeableThreadRow>
           );
           })}
         </div>
