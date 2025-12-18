@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { formatEmailDate, parseFromHeader } from "@/lib/utils/email";
 import EmailMessage from "./EmailMessage";
 import { useBackgroundSync } from "@/lib/hooks/useBackgroundSync";
@@ -79,7 +79,6 @@ export default function EmailList() {
   }>({ stage: "idle", total: 0 });
 
   const { syncState, startSync } = useBackgroundSync();
-  const hasInitialized = useRef(false);
 
   const fetchTagStats = async () => {
     try {
@@ -429,30 +428,31 @@ export default function EmailList() {
   };
 
   useEffect(() => {
-    // Only initialize once
-    if (hasInitialized.current) {
-      return;
-    }
-    hasInitialized.current = true;
+    let cancelled = false;
 
     async function initialize() {
       try {
         const response = await fetch('/api/threads?page=1&limit=100');
         const data = await response.json();
 
+        if (cancelled) return;
+
         if (data.threads && data.threads.length > 0) {
           setThreads(data.threads);
           setHasMore(data.hasMore);
           setPage(1);
           setLoading(false);
-          startSync();
           fetchTagStats();
+
+          startSync();
         } else {
           setSyncing(true);
           const syncResponse = await fetch("/api/emails/sync", {
             method: "POST",
           });
           const syncData = await syncResponse.json();
+
+          if (cancelled) return;
 
           await fetchThreads(1, false);
           setSyncing(false);
@@ -463,6 +463,7 @@ export default function EmailList() {
           }
         }
       } catch (err) {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : "An error occurred");
         setLoading(false);
         setSyncing(false);
@@ -470,7 +471,19 @@ export default function EmailList() {
     }
 
     initialize();
-  }, []);
+
+    const syncInterval = setInterval(() => {
+      if (!cancelled) {
+        startSync();
+      }
+    }, 5 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(syncInterval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startSync]);
 
 
   if (loading || syncing) {
