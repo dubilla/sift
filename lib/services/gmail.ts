@@ -90,17 +90,47 @@ export async function getUnarchivedEmailCount(accessToken: string) {
   }
 }
 
+async function processBatches<T, R>(
+  items: T[],
+  batchSize: number,
+  delayMs: number,
+  processor: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(processor));
+    results.push(...batchResults);
+
+    if (i + batchSize < items.length) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  return results;
+}
+
 export async function getUnarchivedEmails(
   accessToken: string,
   maxResults: number = 100,
-  pageToken?: string
+  pageToken?: string,
+  afterDate?: Date
 ) {
   try {
     const gmail = await getGmailClient(accessToken);
 
+    let query = "in:inbox";
+    if (afterDate) {
+      const year = afterDate.getFullYear();
+      const month = String(afterDate.getMonth() + 1).padStart(2, '0');
+      const day = String(afterDate.getDate()).padStart(2, '0');
+      query += ` after:${year}/${month}/${day}`;
+    }
+
     const response = await gmail.users.messages.list({
       userId: "me",
-      q: "in:inbox",
+      q: query,
       maxResults,
       pageToken,
     });
@@ -113,8 +143,11 @@ export async function getUnarchivedEmails(
       };
     }
 
-    const emails = await Promise.all(
-      response.data.messages.map(async (message) => {
+    const emails = await processBatches(
+      response.data.messages,
+      10,
+      200,
+      async (message) => {
         const emailData = await gmail.users.messages.get({
           userId: "me",
           id: message.id!,
@@ -148,7 +181,7 @@ export async function getUnarchivedEmails(
           isNoreply: isNoreplyAddress(from),
           recipientCount: countRecipients(to),
         };
-      })
+      }
     );
 
     return {
