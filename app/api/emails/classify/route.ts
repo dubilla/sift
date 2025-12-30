@@ -41,12 +41,14 @@ export async function POST(request: Request) {
         )
         .limit(limit);
     } else {
-      // Find unclassified emails (no entry in email_tags)
+      // Find unclassified emails (no entry in email_tags) for this user
       const classifiedEmailIds = await db
         .select({ emailId: emailTags.emailId })
-        .from(emailTags);
+        .from(emailTags)
+        .innerJoin(emails, eq(emailTags.emailId, emails.id))
+        .where(eq(emails.userId, session.user.id));
 
-      const classifiedIds = classifiedEmailIds.map((r) => r.emailId);
+      const classifiedIds = new Set(classifiedEmailIds.map((r) => r.emailId));
 
       emailsToClassify = await db
         .select()
@@ -55,25 +57,16 @@ export async function POST(request: Request) {
           and(
             eq(emails.userId, session.user.id),
             isNull(emails.archivedAt),
-            isNull(emails.deletedAt),
-            classifiedIds.length > 0
-              ? // Exclude already classified emails
-                // Note: drizzle doesn't have notInArray, so we use raw SQL workaround
-                // For now, we'll filter in JS
-                undefined
-              : undefined
+            isNull(emails.deletedAt)
           )
         )
         .orderBy(desc(emails.date))
-        .limit(limit * 2); // Fetch extra to filter
+        .limit(limit * 3); // Fetch extra to filter out classified ones
 
-      // Filter out already classified
-      if (classifiedIds.length > 0) {
-        emailsToClassify = emailsToClassify.filter(
-          (e) => !classifiedIds.includes(e.id)
-        );
-      }
-      emailsToClassify = emailsToClassify.slice(0, limit);
+      // Filter out already classified (in JS since Drizzle doesn't have notInArray easily)
+      emailsToClassify = emailsToClassify
+        .filter((e) => !classifiedIds.has(e.id))
+        .slice(0, limit);
     }
 
     if (emailsToClassify.length === 0) {
