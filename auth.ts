@@ -56,10 +56,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
     Asana,
   ],
+  session: {
+    strategy: "jwt",
+  },
   callbacks: {
-    async session({ session, user }) {
-      if (session.user) {
-        session.user.id = user.id;
+    async jwt({ token, user }) {
+      // Add user ID to token on sign in
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      // Add user ID from token to session
+      if (session.user && token.id) {
+        session.user.id = token.id as string;
       }
       return session;
     },
