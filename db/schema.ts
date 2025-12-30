@@ -8,6 +8,8 @@ import {
   primaryKey,
   real,
   unique,
+  jsonb,
+  index,
 } from "drizzle-orm/pg-core";
 
 // NextAuth tables
@@ -171,5 +173,35 @@ export const emailTags = pgTable(
   },
   (table) => ({
     uniqueEmailTag: unique().on(table.emailId, table.tagId),
+  })
+);
+
+// Classification corrections - track user corrections for pattern learning
+export const classificationCorrections = pgTable(
+  "classification_corrections",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emailId: text("email_id")
+      .notNull()
+      .references(() => emails.id, { onDelete: "cascade" }),
+    oldTagId: text("old_tag_id").references(() => tags.id, { onDelete: "set null" }),
+    newTagId: text("new_tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    oldSource: text("old_source"), // 'rule' | 'llm' | 'pattern' | null
+    oldConfidence: real("old_confidence"), // Previous confidence score
+    correctedAt: timestamp("corrected_at").defaultNow().notNull(),
+    appliedToSimilar: boolean("applied_to_similar").default(false),
+    correctionContext: jsonb("correction_context"), // Email metadata snapshot
+  },
+  (table) => ({
+    userIdx: index("idx_corrections_user").on(table.userId, table.correctedAt),
+    emailIdx: index("idx_corrections_email").on(table.emailId),
+    uniqueCorrection: unique("idx_corrections_unique").on(table.emailId, table.newTagId),
   })
 );

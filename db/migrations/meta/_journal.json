@@ -43,6 +43,13 @@
       "when": 1765751508625,
       "tag": "0005_wandering_wrecker",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1767107230691,
+      "tag": "0006_eager_layla_miller",
+      "breakpoints": true
     }
   ]
 }
