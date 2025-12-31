@@ -1,14 +1,19 @@
 /**
  * Smart email classifier service
- * Provides rule-based quick classification and LLM-powered deep classification
+ * Provides rule-based quick classification, pattern learning from corrections, and LLM-powered deep classification
  */
+
+import { db } from "@/db";
+import { classificationCorrections, tags } from "@/db/schema";
+import { eq, desc } from "drizzle-orm";
+import { areSimilar, SIMILARITY_THRESHOLD } from "./similarity";
 
 export type SmartTag = "archivable" | "quick_action" | "asana_task" | "unsubscribable";
 
 export interface ClassificationResult {
   tag: SmartTag | null;
   confidence: number;
-  source: "rule" | "llm";
+  source: "rule" | "llm" | "pattern";
   reason: string;
 }
 
@@ -159,6 +164,81 @@ export function quickClassify(email: EmailForClassification): ClassificationResu
 }
 
 /**
+ * Pattern-based classification from user corrections
+ * Checks if similar emails have been corrected by the user
+ * Returns learned classification if found
+ */
+export async function patternClassify(
+  email: EmailForClassification,
+  userId: string
+): Promise<ClassificationResult | null> {
+  try {
+    // Fetch recent corrections for this user (limit to last 500 for performance)
+    const corrections = await db
+      .select({
+        newTagId: classificationCorrections.newTagId,
+        correctionContext: classificationCorrections.correctionContext,
+        correctedAt: classificationCorrections.correctedAt,
+      })
+      .from(classificationCorrections)
+      .where(eq(classificationCorrections.userId, userId))
+      .orderBy(desc(classificationCorrections.correctedAt))
+      .limit(500);
+
+    if (corrections.length === 0) {
+      return null;
+    }
+
+    // Check each correction for similarity to current email
+    for (const correction of corrections) {
+      const context = correction.correctionContext as any;
+
+      if (!context) continue;
+
+      const correctedEmailMetadata = {
+        from: context.from,
+        subject: context.subject,
+        listId: context.listId,
+        isNoreply: context.isNoreply,
+        hasUnsubscribe: context.hasUnsubscribe,
+      };
+
+      const currentEmailMetadata = {
+        from: email.from,
+        subject: email.subject,
+        listId: email.listId,
+        isNoreply: email.isNoreply,
+        hasUnsubscribe: email.hasUnsubscribe,
+      };
+
+      // Use HIGH threshold for pattern matching (0.8)
+      if (areSimilar(correctedEmailMetadata, currentEmailMetadata, SIMILARITY_THRESHOLD.HIGH)) {
+        // Found a matching pattern! Get the tag name
+        const [tag] = await db
+          .select({ name: tags.name })
+          .from(tags)
+          .where(eq(tags.id, correction.newTagId))
+          .limit(1);
+
+        if (tag && (tag.name === "archivable" || tag.name === "quick_action" || tag.name === "asana_task" || tag.name === "unsubscribable")) {
+          return {
+            tag: tag.name as SmartTag,
+            confidence: 0.85, // High confidence from user correction
+            source: "pattern",
+            reason: "Similar to previously corrected email",
+          };
+        }
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Pattern classification error:", error);
+    return null;
+  }
+}
+
+/**
  * Classify email using OpenAI
  * Called for emails that quickClassify cannot confidently handle
  */
@@ -248,19 +328,30 @@ Respond with ONLY valid JSON (no markdown):
 /**
  * Full classification pipeline
  * 1. Try quick rules first (fast, free)
- * 2. Fall back to LLM for uncertain cases
+ * 2. Check for learned patterns from user corrections (fast, free)
+ * 3. Fall back to LLM for uncertain cases (costs money)
  */
 export async function classifyEmail(
   email: EmailForClassification,
-  openaiApiKey: string
+  openaiApiKey: string,
+  userId?: string
 ): Promise<ClassificationResult> {
-  // Try quick rules first
+  // Step 1: Try quick rules first
   const quickResult = quickClassify(email);
 
   if (quickResult && quickResult.confidence >= CONFIDENCE_THRESHOLD) {
     return quickResult;
   }
 
-  // Fall back to LLM
+  // Step 2: Check for learned patterns (only if userId provided)
+  if (userId) {
+    const patternResult = await patternClassify(email, userId);
+
+    if (patternResult && patternResult.confidence >= CONFIDENCE_THRESHOLD) {
+      return patternResult;
+    }
+  }
+
+  // Step 3: Fall back to LLM
   return llmClassify(email, openaiApiKey);
 }

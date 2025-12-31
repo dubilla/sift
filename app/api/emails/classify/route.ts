@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { emailIds, limit = 50 } = body;
+    const { emailIds, limit = 50, classifyAll = false } = body;
 
     // Get emails to classify
     let emailsToClassify;
@@ -50,6 +50,9 @@ export async function POST(request: Request) {
 
       const classifiedIds = new Set(classifiedEmailIds.map((r) => r.emailId));
 
+      // Fetch emails based on whether we're classifying all or just a batch
+      const fetchLimit = classifyAll ? 10000 : limit * 3; // If classifyAll, fetch up to 10k, else fetch extra for filtering
+
       emailsToClassify = await db
         .select()
         .from(emails)
@@ -61,12 +64,12 @@ export async function POST(request: Request) {
           )
         )
         .orderBy(desc(emails.date))
-        .limit(limit * 3); // Fetch extra to filter out classified ones
+        .limit(fetchLimit);
 
       // Filter out already classified (in JS since Drizzle doesn't have notInArray easily)
       emailsToClassify = emailsToClassify
         .filter((e) => !classifiedIds.has(e.id))
-        .slice(0, limit);
+        .slice(0, classifyAll ? emailsToClassify.length : limit);
     }
 
     if (emailsToClassify.length === 0) {
@@ -97,7 +100,8 @@ export async function POST(request: Request) {
           isNoreply: email.isNoreply || false,
           recipientCount: email.recipientCount || 1,
         },
-        OPENAI_API_KEY
+        OPENAI_API_KEY,
+        session.user.id // Pass userId for pattern matching
       );
 
       // Only store classifications that meet confidence threshold
@@ -128,6 +132,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       classified: results.filter((r) => r.tag !== null).length,
       total: emailsToClassify.length,
+      classifiedAll: classifyAll,
       results,
     });
   } catch (error) {

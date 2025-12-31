@@ -92,14 +92,14 @@ export default function EmailList() {
     }
   };
 
-  const handleClassifyEmails = async () => {
+  const handleClassifyEmails = async (classifyAll: boolean = false) => {
     setClassifying(true);
-    setClassifyStatus({ stage: "classifying", total: 50 });
+    setClassifyStatus({ stage: "classifying", total: classifyAll ? 0 : 50 });
     try {
       const response = await fetch("/api/emails/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit: 50 }),
+        body: JSON.stringify({ limit: 50, classifyAll }),
       });
       const data = await response.json();
 
@@ -545,21 +545,21 @@ export default function EmailList() {
         totalCount={syncState.totalCount}
         isSyncing={syncState.isSyncing}
       />
-      <div className="mb-1 flex justify-end">
+      <div className="mb-1 flex justify-end gap-2">
         <button
-          onClick={handleClassifyEmails}
+          onClick={() => handleClassifyEmails(false)}
           disabled={classifying}
           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
             classifyStatus.stage === "success"
               ? "bg-green-100 text-green-700"
               : "bg-purple-100 text-purple-700 hover:bg-purple-200"
           }`}
-          title="Classify untagged emails using AI"
+          title="Classify next 50 untagged emails using AI"
         >
           {classifyStatus.stage === "classifying" ? (
             <>
               <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-purple-600 border-r-transparent"></span>
-              <span className="hidden sm:inline">Classifying the latest {classifyStatus.total} emails</span>
+              <span className="hidden sm:inline">Classifying{classifyStatus.total > 0 ? ` ${classifyStatus.total}` : "..."} emails</span>
               <span className="sm:hidden">Classifying...</span>
             </>
           ) : classifyStatus.stage === "success" ? (
@@ -575,7 +575,42 @@ export default function EmailList() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
-              <span>Classify</span>
+              <span className="hidden sm:inline">Classify 50</span>
+              <span className="sm:hidden">Classify</span>
+            </>
+          )}
+        </button>
+        <button
+          onClick={() => handleClassifyEmails(true)}
+          disabled={classifying}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
+            classifyStatus.stage === "success"
+              ? "bg-green-100 text-green-700"
+              : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+          }`}
+          title="Classify ALL untagged emails using AI (may take a while)"
+        >
+          {classifyStatus.stage === "classifying" ? (
+            <>
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-indigo-600 border-r-transparent"></span>
+              <span className="hidden sm:inline">Classifying{classifyStatus.total > 0 ? ` ${classifyStatus.total}` : "..."} emails</span>
+              <span className="sm:hidden">Classifying...</span>
+            </>
+          ) : classifyStatus.stage === "success" ? (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="hidden sm:inline">Classified {classifyStatus.total} emails!</span>
+              <span className="sm:hidden">Done!</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <span className="hidden sm:inline">Classify All</span>
+              <span className="sm:hidden">All</span>
             </>
           )}
         </button>
