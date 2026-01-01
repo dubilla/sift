@@ -81,28 +81,41 @@ export const userStats = pgTable("user_stats", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const emails = pgTable("emails", {
-  id: text("id").primaryKey(), // Will become internal UUID in Step 5
-  externalId: text("external_id").notNull().unique(), // Gmail message ID
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id),
-  threadId: text("thread_id"),
-  subject: text("subject"),
-  from: varchar("from", { length: 500 }).notNull(),
-  to: text("to"),
-  snippet: text("snippet"),
-  date: timestamp("date").notNull(),
-  archivedAt: timestamp("archived_at"),
-  deletedAt: timestamp("deleted_at"),
-  hasUnsubscribe: boolean("has_unsubscribe").default(false),
-  unsubscribeUrl: text("unsubscribe_url"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  // Smart tagging metadata
-  listId: text("list_id"), // List-Id header for mailing list detection
-  isNoreply: boolean("is_noreply").default(false), // Sender is noreply/donotreply
-  recipientCount: integer("recipient_count").default(1), // Number of recipients
-});
+export const emails = pgTable(
+  "emails",
+  {
+    id: text("id").primaryKey(), // Will become internal UUID in Step 5
+    externalId: text("external_id").notNull().unique(), // Gmail message ID
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    threadId: text("thread_id"),
+    subject: text("subject"),
+    from: varchar("from", { length: 500 }).notNull(),
+    to: text("to"),
+    snippet: text("snippet"),
+    date: timestamp("date").notNull(),
+    archivedAt: timestamp("archived_at"),
+    deletedAt: timestamp("deleted_at"),
+    hasUnsubscribe: boolean("has_unsubscribe").default(false),
+    unsubscribeUrl: text("unsubscribe_url"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    // Smart tagging metadata
+    listId: text("list_id"), // List-Id header for mailing list detection
+    isNoreply: boolean("is_noreply").default(false), // Sender is noreply/donotreply
+    recipientCount: integer("recipient_count").default(1), // Number of recipients
+  },
+  (table) => ({
+    // Composite index for review classifications query
+    // Optimizes: WHERE userId = X AND archivedAt IS NULL AND deletedAt IS NULL ORDER BY date DESC
+    reviewClassificationsIdx: index("idx_emails_review_classifications").on(
+      table.userId,
+      table.archivedAt,
+      table.deletedAt,
+      table.date
+    ),
+  })
+);
 
 export const activityLog = pgTable("activity_log", {
   id: text("id").primaryKey(),
@@ -142,18 +155,25 @@ export const asanaTasks = pgTable("asana_tasks", {
 });
 
 // Smart tagging tables
-export const tags = pgTable("tags", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  name: text("name").notNull().unique(), // 'archivable', 'quick_action', 'asana_task', 'unsubscribable'
-  displayName: text("display_name").notNull(), // 'Archive', 'Quick Action', etc.
-  description: text("description"), // Help text for the tag
-  color: text("color"), // Tailwind color class or hex
-  icon: text("icon"), // Emoji or icon identifier
-  sortOrder: integer("sort_order").default(0), // For consistent UI ordering
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const tags = pgTable(
+  "tags",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull().unique(), // 'archivable', 'quick_action', 'asana_task', 'unsubscribable'
+    displayName: text("display_name").notNull(), // 'Archive', 'Quick Action', etc.
+    description: text("description"), // Help text for the tag
+    color: text("color"), // Tailwind color class or hex
+    icon: text("icon"), // Emoji or icon identifier
+    sortOrder: integer("sort_order").default(0), // For consistent UI ordering
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    // Index for filtering by tag name in review classifications
+    nameIdx: index("idx_tags_name").on(table.name),
+  })
+);
 
 export const emailTags = pgTable(
   "email_tags",
@@ -173,6 +193,12 @@ export const emailTags = pgTable(
   },
   (table) => ({
     uniqueEmailTag: unique().on(table.emailId, table.tagId),
+    // Index for joining emails to emailTags
+    emailIdIdx: index("idx_email_tags_email_id").on(table.emailId),
+    // Index for joining tags to emailTags
+    tagIdIdx: index("idx_email_tags_tag_id").on(table.tagId),
+    // Index for confidence filtering (e.g., "needs review" 0.7-0.8 range)
+    confidenceIdx: index("idx_email_tags_confidence").on(table.confidence),
   })
 );
 

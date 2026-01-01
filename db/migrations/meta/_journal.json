@@ -50,6 +50,13 @@
       "when": 1767107230691,
       "tag": "0006_eager_layla_miller",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1767231596190,
+      "tag": "0007_serious_odin",
+      "breakpoints": true
     }
   ]
 }
