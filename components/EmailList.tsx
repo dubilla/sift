@@ -77,6 +77,7 @@ export default function EmailList() {
     stage: "idle" | "classifying" | "success";
     total: number;
   }>({ stage: "idle", total: 0 });
+  const [openMenuThreadId, setOpenMenuThreadId] = useState<string | null>(null);
 
   const { syncState, startSync } = useBackgroundSync();
 
@@ -488,12 +489,13 @@ export default function EmailList() {
 
   if (loading || syncing) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-8">
+      <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
         <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent mb-4"></div>
-          <p className="text-gray-600">
-            {syncing ? "Syncing your emails..." : "Loading..."}
+          <div className="inline-block h-10 w-10 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent mb-4"></div>
+          <p className="text-slate-700 font-semibold text-base">
+            {syncing ? "Syncing emails..." : "Loading inbox..."}
           </p>
+          <p className="text-slate-500 text-sm mt-1">Please wait</p>
         </div>
       </div>
     );
@@ -501,10 +503,10 @@ export default function EmailList() {
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-8">
+      <div className="bg-white rounded-2xl shadow-lg border border-red-200 p-8">
         <div className="text-center">
-          <div className="text-xl font-bold text-red-600 mb-2">Error</div>
-          <p className="text-gray-500 text-sm">{error}</p>
+          <div className="text-2xl font-bold text-red-600 mb-2">Error</div>
+          <p className="text-slate-600 text-sm">{error}</p>
         </div>
       </div>
     );
@@ -512,27 +514,27 @@ export default function EmailList() {
 
   if (threads.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-8">
-        <div className="text-center py-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+      <div className="bg-white rounded-2xl shadow-lg border border-green-200 p-12 animate-slide-in">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-green-500 rounded-full mb-4 shadow-lg">
             <svg
-              className="w-8 h-8 text-green-600"
+              className="w-10 h-10 text-white"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              strokeWidth={2.5}
             >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={2}
                 d="M5 13l4 4L19 7"
               />
             </svg>
           </div>
-          <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-            Inbox Zero!
+          <h2 className="text-3xl font-bold text-green-600 mb-2" style={{ letterSpacing: '-0.02em' }}>
+            Inbox Zero
           </h2>
-          <p className="text-gray-500">You have no unarchived emails</p>
+          <p className="text-slate-600 text-base">All emails processed</p>
         </div>
       </div>
     );
@@ -545,35 +547,35 @@ export default function EmailList() {
         totalCount={syncState.totalCount}
         isSyncing={syncState.isSyncing}
       />
-      <div className="mb-1 flex justify-end gap-2">
+      <div className="mb-3 flex justify-end gap-2">
         <button
           onClick={() => handleClassifyEmails(false)}
           disabled={classifying}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
+          className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm btn-action ${
             classifyStatus.stage === "success"
-              ? "bg-green-100 text-green-700"
-              : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+              ? "bg-green-600 text-white"
+              : "bg-purple-600 text-white hover:bg-purple-700"
           }`}
           title="Classify next 50 untagged emails using AI"
         >
           {classifyStatus.stage === "classifying" ? (
             <>
-              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-purple-600 border-r-transparent"></span>
-              <span className="hidden sm:inline">Classifying{classifyStatus.total > 0 ? ` ${classifyStatus.total}` : "..."} emails</span>
-              <span className="sm:hidden">Classifying...</span>
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-white border-r-transparent"></span>
+              <span className="hidden sm:inline">Classifying{classifyStatus.total > 0 ? ` ${classifyStatus.total}` : "..."}</span>
+              <span className="sm:hidden">Classifying</span>
             </>
           ) : classifyStatus.stage === "success" ? (
             <>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
-              <span className="hidden sm:inline">Classified {classifyStatus.total} emails!</span>
-              <span className="sm:hidden">Done!</span>
+              <span className="hidden sm:inline">Classified {classifyStatus.total}</span>
+              <span className="sm:hidden">Done</span>
             </>
           ) : (
             <>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
               <span className="hidden sm:inline">Classify 50</span>
               <span className="sm:hidden">Classify</span>
@@ -583,31 +585,31 @@ export default function EmailList() {
         <button
           onClick={() => handleClassifyEmails(true)}
           disabled={classifying}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
+          className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm btn-action ${
             classifyStatus.stage === "success"
-              ? "bg-green-100 text-green-700"
-              : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+              ? "bg-green-600 text-white"
+              : "bg-indigo-600 text-white hover:bg-indigo-700"
           }`}
           title="Classify ALL untagged emails using AI (may take a while)"
         >
           {classifyStatus.stage === "classifying" ? (
             <>
-              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-indigo-600 border-r-transparent"></span>
-              <span className="hidden sm:inline">Classifying{classifyStatus.total > 0 ? ` ${classifyStatus.total}` : "..."} emails</span>
-              <span className="sm:hidden">Classifying...</span>
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-white border-r-transparent"></span>
+              <span className="hidden sm:inline">Classifying{classifyStatus.total > 0 ? ` ${classifyStatus.total}` : "..."}</span>
+              <span className="sm:hidden">All</span>
             </>
           ) : classifyStatus.stage === "success" ? (
             <>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
-              <span className="hidden sm:inline">Classified {classifyStatus.total} emails!</span>
-              <span className="sm:hidden">Done!</span>
+              <span className="hidden sm:inline">Classified {classifyStatus.total}</span>
+              <span className="sm:hidden">Done</span>
             </>
           ) : (
             <>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
               <span className="hidden sm:inline">Classify All</span>
               <span className="sm:hidden">All</span>
@@ -615,14 +617,14 @@ export default function EmailList() {
           )}
         </button>
       </div>
-      <div className="bg-white rounded-lg shadow-md mb-2 p-2">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-3 p-3">
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => handleTagFilterChange(null)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all shadow-sm btn-action ${
               activeTagFilter === null
                 ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
             }`}
           >
             All
@@ -631,19 +633,19 @@ export default function EmailList() {
             <button
               key={tag.id}
               onClick={() => handleTagFilterChange(tag.name)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all shadow-sm btn-action flex items-center gap-1.5 ${
                 activeTagFilter === tag.name
                   ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
               }`}
             >
-              <span>{tag.icon}</span>
+              <span className="text-sm hidden sm:inline">{tag.icon}</span>
               <span>{tag.displayName}</span>
               {tag.count > 0 && (
-                <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+                <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
                   activeTagFilter === tag.name
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-200 text-gray-600"
+                    ? "bg-white/30 text-white"
+                    : "bg-slate-100 text-slate-600"
                 }`}>
                   {tag.count}
                 </span>
@@ -652,19 +654,19 @@ export default function EmailList() {
           ))}
         </div>
       </div>
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {threads.length > 0 && (
-          <div className="sticky top-0 z-10 bg-gray-100 border-b border-gray-300 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+          <div className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 px-3 py-2 sm:px-4 sm:py-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <input
                   type="checkbox"
                   checked={selectedThreadIds.size === threads.length && threads.length > 0}
                   onChange={handleSelectAll}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
                   title="Select all"
                 />
-                <span className="text-sm text-gray-700 font-medium">
+                <span className="text-xs sm:text-sm text-slate-700 font-semibold">
                   {selectedThreadIds.size > 0
                     ? `${selectedThreadIds.size} selected`
                     : 'Select all'}
@@ -674,22 +676,22 @@ export default function EmailList() {
                 <button
                   onClick={handleBulkArchive}
                   disabled={bulkArchiving}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed btn-action font-semibold text-xs sm:text-sm"
                 >
                   <svg
                     className="w-4 h-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
+                    strokeWidth={2.5}
                   >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      strokeWidth={2}
                       d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
                     />
                   </svg>
-                  <span className="text-sm font-medium">
+                  <span>
                     {bulkArchiving ? 'Archiving...' : `Archive ${selectedThreadIds.size}`}
                   </span>
                 </button>
@@ -705,9 +707,9 @@ export default function EmailList() {
           const isExpanded = expandedThreads.has(thread.threadId);
           const isSelected = selectedThreadIds.has(thread.threadId);
           return (
-            <div key={thread.threadId} className={`transition-colors ${isSelected ? 'bg-blue-50' : ''}`}>
-              <div className="p-4 hover:bg-gray-50">
-                <div className="flex items-start gap-2 sm:gap-4">
+            <div key={thread.threadId} className={`transition-all ${isSelected ? 'bg-blue-50 border-l-2 border-blue-500' : 'hover:bg-slate-50'}`}>
+              <div className="p-3 sm:p-4">
+                <div className="flex items-start gap-2 sm:gap-3">
                   <input
                     type="checkbox"
                     checked={isSelected}
@@ -716,7 +718,7 @@ export default function EmailList() {
                       e.stopPropagation();
                       handleCheckboxClick(thread.threadId, index, e.shiftKey);
                     }}
-                    className="w-4 h-4 mt-1 text-blue-600 border-gray-300 rounded focus:ring-blue-500 flex-shrink-0"
+                    className="w-4 h-4 mt-1 text-blue-600 border-slate-300 rounded focus:ring-blue-500 flex-shrink-0 cursor-pointer"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-1">
@@ -724,50 +726,164 @@ export default function EmailList() {
                         className="flex-1 min-w-0 cursor-pointer"
                         onClick={() => toggleThread(thread.threadId)}
                       >
-                        <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                        <div className="flex items-baseline gap-1.5 sm:gap-2 mb-0.5 flex-wrap">
                           {thread.smartTag && thread.smartTagIcon && (
                             <span
-                              className="text-sm flex-shrink-0"
+                              className="text-xs sm:text-sm flex-shrink-0 hidden sm:inline"
                               title={thread.smartTag}
                             >
                               {thread.smartTagIcon}
                             </span>
                           )}
-                          <span className="font-semibold text-gray-900 truncate">
+                          <span className="font-semibold text-slate-900 text-sm sm:text-base truncate">
                             {sender.name}
                           </span>
                           {thread.messageCount > 1 && (
-                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                            <span className="text-xs text-slate-600 bg-slate-200 px-1.5 py-0.5 rounded flex-shrink-0 font-semibold">
                               {thread.messageCount}
                             </span>
                           )}
-                          <span className="text-xs text-gray-500 flex-shrink-0">
+                          <span className="text-xs text-slate-500 flex-shrink-0">
                             {formatEmailDate(thread.date)}
                           </span>
                         </div>
-                        <h3 className="text-sm font-medium text-gray-900 mb-1 truncate">
+                        <h3 className="text-sm sm:text-base font-semibold text-slate-800 mb-0.5 truncate">
                           {thread.subject || "(no subject)"}
                         </h3>
                       </div>
-                      <div className="flex gap-1 sm:gap-2 flex-shrink-0">
+                      <div className="flex gap-1 sm:gap-1.5 flex-shrink-0">
+                    {/* Mobile: More menu + Archive */}
+                    <div className="sm:hidden relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuThreadId(openMenuThreadId === thread.threadId ? null : thread.threadId);
+                        }}
+                        className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all btn-action border border-slate-200"
+                        title="More actions"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          strokeWidth={2.5}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                          />
+                        </svg>
+                      </button>
+                      {openMenuThreadId === thread.threadId && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setOpenMenuThreadId(null)}
+                          />
+                          <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[160px]">
+                            {thread.messageCount > 1 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleThread(thread.threadId);
+                                  setOpenMenuThreadId(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                                {isExpanded ? "Collapse" : "Expand"}
+                              </button>
+                            )}
+                            {thread.hasUnsubscribe && thread.unsubscribeUrl && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUnsubscribe(thread.latestEmailId, thread.threadId);
+                                  setOpenMenuThreadId(null);
+                                }}
+                                disabled={isUnsubscribing}
+                                className="w-full px-4 py-2 text-left text-sm text-orange-700 hover:bg-orange-50 flex items-center gap-2 disabled:opacity-50"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                </svg>
+                                Unsubscribe
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenAsanaModal(thread);
+                                setOpenMenuThreadId(null);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            >
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3.75a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm-4.58 7.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm9.16 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5z" />
+                              </svg>
+                              Create task
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenFilterModal(thread.from);
+                                setOpenMenuThreadId(null);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                              </svg>
+                              Create filter
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleArchiveThread(thread.threadId)}
+                      disabled={isArchiving}
+                      className="sm:hidden p-1.5 bg-green-600 text-white hover:bg-green-700 rounded-lg transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed btn-action flex items-center justify-center"
+                      title="Archive"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2.5}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </button>
+
+                    {/* Desktop: All buttons visible */}
                     {thread.messageCount > 1 && (
                       <button
                         onClick={() => toggleThread(thread.threadId)}
-                        className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                        title={isExpanded ? "Collapse thread" : "Expand thread"}
+                        className="hidden sm:flex p-1.5 sm:p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all btn-action border border-slate-200 items-center justify-center"
+                        title={isExpanded ? "Collapse" : "Expand"}
                       >
                         <svg
-                          className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${
+                          className={`w-4 h-4 transition-transform ${
                             isExpanded ? "rotate-180" : ""
                           }`}
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
+                          strokeWidth={2.5}
                         >
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            strokeWidth={2}
                             d="M19 9l-7 7-7-7"
                           />
                         </svg>
@@ -777,19 +893,19 @@ export default function EmailList() {
                       <button
                         onClick={() => handleUnsubscribe(thread.latestEmailId, thread.threadId)}
                         disabled={isUnsubscribing}
-                        className="p-1.5 sm:p-2 text-orange-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Unsubscribe and archive"
+                        className="hidden sm:flex p-1.5 sm:p-2 bg-orange-600 text-white hover:bg-orange-700 rounded-lg transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed btn-action items-center justify-center"
+                        title="Unsubscribe"
                       >
                         <svg
-                          className="w-4 h-4 sm:w-5 sm:h-5"
+                          className="w-4 h-4"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
+                          strokeWidth={2.5}
                         >
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            strokeWidth={2}
                             d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
                           />
                         </svg>
@@ -797,11 +913,11 @@ export default function EmailList() {
                     )}
                     <button
                       onClick={() => handleOpenAsanaModal(thread)}
-                      className="p-1.5 sm:p-2 text-orange-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                      title="Create Asana task"
+                      className="hidden sm:flex p-1.5 sm:p-2 bg-pink-600 text-white hover:bg-pink-700 rounded-lg transition-all shadow-sm btn-action items-center justify-center"
+                      title="Create task"
                     >
                       <svg
-                        className="w-4 h-4 sm:w-5 sm:h-5"
+                        className="w-4 h-4"
                         viewBox="0 0 24 24"
                         fill="currentColor"
                       >
@@ -810,19 +926,19 @@ export default function EmailList() {
                     </button>
                     <button
                       onClick={() => handleOpenFilterModal(thread.from)}
-                      className="p-1.5 sm:p-2 text-purple-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                      title="Create filter from sender"
+                      className="hidden sm:flex p-1.5 sm:p-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition-all shadow-sm btn-action items-center justify-center"
+                      title="Create filter"
                     >
                       <svg
-                        className="w-4 h-4 sm:w-5 sm:h-5"
+                        className="w-4 h-4"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        strokeWidth={2.5}
                       >
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          strokeWidth={2}
                           d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
                         />
                       </svg>
@@ -830,20 +946,20 @@ export default function EmailList() {
                     <button
                       onClick={() => handleArchiveThread(thread.threadId)}
                       disabled={isArchiving}
-                      className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Archive thread"
+                      className="hidden sm:flex p-1.5 sm:p-2 bg-green-600 text-white hover:bg-green-700 rounded-lg transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed btn-action items-center justify-center"
+                      title="Archive"
                     >
                       <svg
-                        className="w-4 h-4 sm:w-5 sm:h-5"
+                        className="w-4 h-4"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        strokeWidth={2.5}
                       >
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                          d="M5 13l4 4L19 7"
                         />
                       </svg>
                     </button>
@@ -853,7 +969,7 @@ export default function EmailList() {
                       className="cursor-pointer"
                       onClick={() => toggleThread(thread.threadId)}
                     >
-                      <p className="text-sm text-gray-600 line-clamp-2">
+                      <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
                         {thread.snippet}
                       </p>
                     </div>
@@ -861,14 +977,14 @@ export default function EmailList() {
                 </div>
               </div>
               {isExpanded && (
-                <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
+                <div className="bg-slate-50 px-3 sm:px-4 py-3 border-t border-slate-200">
                   {loadingThreads.has(thread.threadId) ? (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-gray-600 border-r-transparent"></div>
-                      <span>Loading thread messages...</span>
+                    <div className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
+                      <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-blue-600 border-r-transparent"></div>
+                      <span>Loading messages...</span>
                     </div>
                   ) : threadMessages[thread.threadId] ? (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {threadMessages[thread.threadId].map((message) => (
                         <EmailMessage
                           key={message.id}
@@ -887,7 +1003,7 @@ export default function EmailList() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-600 italic">No messages found</p>
+                    <p className="text-sm text-slate-600 italic">No messages found</p>
                   )}
                 </div>
               )}
@@ -896,11 +1012,11 @@ export default function EmailList() {
           })}
         </div>
         {hasMore && (
-          <div className="p-4 border-t border-gray-200">
+          <div className="p-3 sm:p-4 border-t border-slate-200 bg-slate-50">
             <button
               onClick={loadMore}
               disabled={loadingMore}
-              className="w-full py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-2.5 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed btn-action font-semibold text-sm"
             >
               {loadingMore ? "Loading..." : "Load More"}
             </button>

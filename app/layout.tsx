@@ -14,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="bg-gray-50 min-h-screen">
+      <body className="bg-gradient-to-br from-slate-50 via-blue-50 to-violet-50 min-h-screen" style={{ fontFamily: 'Outfit, system-ui, -apple-system, sans-serif' }}>
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>

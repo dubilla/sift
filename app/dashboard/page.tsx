@@ -13,25 +13,27 @@ export default async function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-violet-50">
       <TokenExpiredBanner />
       <StatsPanel />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-600 mt-1">
-              Welcome back, {session.user?.name}
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
+        <div className="mb-3 sm:mb-4 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-800 mb-0.5 truncate">
+              Inbox
+            </h1>
+            <p className="text-slate-600 text-xs sm:text-sm">
+              {session.user?.name?.split(' ')[0]}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <Link
               href="/review-classifications"
-              className="flex items-center gap-2 px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all shadow-sm btn-action font-semibold text-xs sm:text-sm"
             >
               <svg
-                className="w-5 h-5"
+                className="w-4 h-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -43,14 +45,14 @@ export default async function Dashboard() {
                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
                 />
               </svg>
-              <span className="hidden sm:inline">Review Classifications</span>
+              <span className="hidden sm:inline">Review</span>
             </Link>
             <Link
               href="/settings"
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-lg transition-all shadow-sm border border-slate-200 btn-action font-semibold text-xs sm:text-sm"
             >
               <svg
-                className="w-5 h-5"
+                className="w-4 h-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -68,7 +70,7 @@ export default async function Dashboard() {
                   d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                 />
               </svg>
-              Settings
+              <span className="hidden sm:inline">Settings</span>
             </Link>
           </div>
         </div>
