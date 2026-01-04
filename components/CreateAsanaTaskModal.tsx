@@ -114,11 +114,8 @@ export default function CreateAsanaTaskModal({
       setError(null);
       setSuccess(null);
 
-      // Pre-populate task name and notes from email
+      // Pre-populate task name
       setTaskName(emailSubject || "Follow up on email");
-      setNotes(
-        `From: ${emailFrom}\n\n${emailSnippet}\n\n---\nCreated from email in Sift`
-      );
 
       // Check connection and load data
       const init = async () => {
@@ -128,6 +125,30 @@ export default function CreateAsanaTaskModal({
         if (statusData.connected) {
           setIsConnected(true);
           await Promise.all([loadWorkspaces(), loadSettings()]);
+
+          // Fetch full email body
+          try {
+            const emailResponse = await fetch(`/api/emails/${emailId}`);
+            if (emailResponse.ok) {
+              const emailData = await emailResponse.json();
+              // Use full body text (fallback to snippet if not available)
+              const bodyContent = emailData.bodyText || emailSnippet;
+              setNotes(
+                `From: ${emailFrom}\n\n${bodyContent}\n\n---\nCreated from email in Sift`
+              );
+            } else {
+              // Fallback to snippet if fetch fails
+              setNotes(
+                `From: ${emailFrom}\n\n${emailSnippet}\n\n---\nCreated from email in Sift`
+              );
+            }
+          } catch (err) {
+            console.error("Error fetching full email:", err);
+            // Fallback to snippet
+            setNotes(
+              `From: ${emailFrom}\n\n${emailSnippet}\n\n---\nCreated from email in Sift`
+            );
+          }
         } else {
           setIsConnected(false);
         }
@@ -136,7 +157,7 @@ export default function CreateAsanaTaskModal({
 
       init();
     }
-  }, [isOpen, emailSubject, emailFrom, emailSnippet, loadWorkspaces, loadSettings]);
+  }, [isOpen, emailSubject, emailFrom, emailSnippet, emailId, loadWorkspaces, loadSettings]);
 
   useEffect(() => {
     if (selectedWorkspace) {
