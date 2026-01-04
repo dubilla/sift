@@ -63,9 +63,10 @@ export async function getProjects(
 export interface CreateTaskParams {
   name: string;
   notes?: string;
-  projectGid: string;
+  projectGid?: string;
   workspaceGid: string;
   dueOn?: string; // YYYY-MM-DD format
+  assigneeGid?: string; // Asana user GID to assign task to
 }
 
 export async function createTask(
@@ -79,6 +80,7 @@ export async function createTask(
       workspace: string;
       projects?: string[];
       due_on?: string;
+      assignee?: string;
     };
   } = {
     data: {
@@ -99,6 +101,10 @@ export async function createTask(
     requestBody.data.due_on = params.dueOn;
   }
 
+  if (params.assigneeGid) {
+    requestBody.data.assignee = params.assigneeGid;
+  }
+
   return asanaFetch<AsanaTask>(accessToken, "/tasks", {
     method: "POST",
     body: JSON.stringify(requestBody),
@@ -112,5 +118,20 @@ export async function getTask(
   return asanaFetch<AsanaTask>(
     accessToken,
     `/tasks/${taskGid}?opt_fields=name,permalink_url`
+  );
+}
+
+interface AsanaUser {
+  gid: string;
+  name: string;
+  email: string;
+}
+
+export async function getCurrentUser(
+  accessToken: string
+): Promise<AsanaUser> {
+  return asanaFetch<AsanaUser>(
+    accessToken,
+    "/users/me?opt_fields=gid,name,email"
   );
 }

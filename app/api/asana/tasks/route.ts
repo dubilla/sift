@@ -1,9 +1,10 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { asanaTasks, activityLog } from "@/db/schema";
+import { asanaTasks, activityLog, asanaSettings } from "@/db/schema";
 import { getValidAccessTokenForProvider } from "@/lib/services/token";
-import { createTask } from "@/lib/services/asana";
+import { createTask, getCurrentUser } from "@/lib/services/asana";
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 
 export async function POST(request: Request) {
   try {
@@ -35,12 +36,47 @@ export async function POST(request: Request) {
       "asana"
     );
 
+    // Get or fetch Asana user GID
+    let asanaUserGid: string | null = null;
+    const [settings] = await db
+      .select()
+      .from(asanaSettings)
+      .where(eq(asanaSettings.userId, session.user.id))
+      .limit(1);
+
+    if (settings?.asanaUserGid) {
+      asanaUserGid = settings.asanaUserGid;
+    } else {
+      // Fetch and store user GID
+      try {
+        const asanaUser = await getCurrentUser(accessToken);
+        asanaUserGid = asanaUser.gid;
+
+        // Store it for future use
+        if (settings) {
+          await db
+            .update(asanaSettings)
+            .set({ asanaUserGid: asanaUser.gid })
+            .where(eq(asanaSettings.userId, session.user.id));
+        } else {
+          await db.insert(asanaSettings).values({
+            userId: session.user.id,
+            asanaUserGid: asanaUser.gid,
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching Asana user GID:", err);
+        // Continue without assignee if fetch fails
+      }
+    }
+
     const task = await createTask(accessToken, {
       name,
       notes,
       projectGid,
       workspaceGid,
       dueOn,
+      assigneeGid: asanaUserGid || undefined,
     });
 
     // Store the task in our database

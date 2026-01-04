@@ -1,0 +1,1 @@
+ALTER TABLE "asana_settings" ADD COLUMN "asana_user_gid" text;

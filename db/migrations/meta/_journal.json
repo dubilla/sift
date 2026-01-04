@@ -57,6 +57,13 @@
       "when": 1767231596190,
       "tag": "0007_serious_odin",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1767497385917,
+      "tag": "0008_magenta_scalphunter",
+      "breakpoints": true
     }
   ]
 }

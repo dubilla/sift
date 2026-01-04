@@ -132,6 +132,7 @@ export const asanaSettings = pgTable("asana_settings", {
   userId: text("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
+  asanaUserGid: text("asana_user_gid"), // Asana user GID for task assignment
   defaultWorkspaceGid: text("default_workspace_gid"),
   defaultWorkspaceName: text("default_workspace_name"),
   defaultProjectGid: text("default_project_gid"),
