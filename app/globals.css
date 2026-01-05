@@ -100,3 +100,48 @@
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #2563eb, #7c3aed);
 }
+
+/* Email content mobile safety */
+.prose {
+  /* Force all children to respect container width */
+  & * {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Handle tables - keep as tables but ensure they fit */
+  & table {
+    width: 100% !important;
+    table-layout: auto !important;
+  }
+
+  & td, & th {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+
+  /* Long URLs and unbreakable text */
+  & a {
+    word-break: break-all !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  /* Images */
+  & img {
+    height: auto !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  /* Pre-formatted text and code blocks */
+  & pre, & code {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+
+  /* Divs and containers with fixed widths */
+  & div, & span, & p {
+    max-width: 100% !important;
+  }
+}
