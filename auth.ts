@@ -16,22 +16,31 @@ const Todoist = {
   type: "oauth" as const,
   authorization: {
     url: "https://todoist.com/oauth/authorize",
-    params: {
-      scope: "data:read_write",
-    },
+    params: { scope: "data:read_write" },
   },
   token: "https://todoist.com/oauth/access_token",
-  userinfo: "https://api.todoist.com/sync/v9/sync",
+  client: {
+    token_endpoint_auth_method: "client_secret_post",
+  },
+  userinfo: {
+    url: "https://api.todoist.com/api/v1/user",
+    async request({ tokens }: { tokens: { access_token?: string } }) {
+      const res = await fetch("https://api.todoist.com/api/v1/user", {
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+        },
+      });
+      return res.json();
+    },
+  },
   clientId: process.env.TODOIST_CLIENT_ID,
   clientSecret: process.env.TODOIST_CLIENT_SECRET,
-  profile(profile: { user?: { full_name?: string; email?: string; id?: number }; full_name?: string; email?: string; id?: number }) {
-    // Todoist sync API wraps user data; handle both shapes
-    const user = profile.user || profile;
+  profile(profile: { id?: number; user_id?: number; full_name: string; email?: string; user_email?: string; avatar_big?: string }) {
     return {
-      id: String(user.id),
-      name: user.full_name,
-      email: user.email,
-      image: null,
+      id: String(profile.id ?? profile.user_id),
+      name: profile.full_name,
+      email: profile.email ?? profile.user_email ?? "",
+      image: profile.avatar_big ?? null,
     };
   },
 };
