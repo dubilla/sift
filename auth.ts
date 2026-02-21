@@ -9,6 +9,33 @@ import {
   verificationTokens,
 } from "@/db/schema";
 
+// Custom Todoist OAuth provider
+const Todoist = {
+  id: "todoist",
+  name: "Todoist",
+  type: "oauth" as const,
+  authorization: {
+    url: "https://todoist.com/oauth/authorize",
+    params: {
+      scope: "data:read_write",
+    },
+  },
+  token: "https://todoist.com/oauth/access_token",
+  userinfo: "https://api.todoist.com/sync/v9/sync",
+  clientId: process.env.TODOIST_CLIENT_ID,
+  clientSecret: process.env.TODOIST_CLIENT_SECRET,
+  profile(profile: { user?: { full_name?: string; email?: string; id?: number }; full_name?: string; email?: string; id?: number }) {
+    // Todoist sync API wraps user data; handle both shapes
+    const user = profile.user || profile;
+    return {
+      id: String(user.id),
+      name: user.full_name,
+      email: user.email,
+      image: null,
+    };
+  },
+};
+
 // Custom Asana OAuth provider
 const Asana = {
   id: "asana",
@@ -55,6 +82,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       allowDangerousEmailAccountLinking: true,
     }),
     Asana,
+    Todoist,
   ],
   session: {
     strategy: "jwt",

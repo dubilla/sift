@@ -9,7 +9,7 @@ interface TokenRefreshResponse {
   token_type: string;
 }
 
-type Provider = "google" | "asana";
+type Provider = "google" | "asana" | "todoist";
 
 interface ProviderConfig {
   tokenUrl: string;
@@ -30,6 +30,12 @@ function getProviderConfig(provider: Provider): ProviderConfig {
         tokenUrl: "https://app.asana.com/-/oauth_token",
         clientId: process.env.ASANA_CLIENT_ID!,
         clientSecret: process.env.ASANA_CLIENT_SECRET!,
+      };
+    case "todoist":
+      return {
+        tokenUrl: "https://todoist.com/oauth/access_token",
+        clientId: process.env.TODOIST_CLIENT_ID!,
+        clientSecret: process.env.TODOIST_CLIENT_SECRET!,
       };
   }
 }
@@ -57,6 +63,12 @@ export async function getValidAccessTokenForProvider(
 
   if (!account.access_token) {
     throw new Error(`No ${provider} access token found`);
+  }
+
+  // Todoist tokens don't expire - return immediately
+  if (provider === "todoist") {
+    console.log(`[todoist] Token is permanent, returning existing token`);
+    return account.access_token;
   }
 
   // Check if token is expired (or will expire in next 5 minutes)

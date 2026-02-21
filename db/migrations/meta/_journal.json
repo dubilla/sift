@@ -64,6 +64,13 @@
       "when": 1767497385917,
       "tag": "0008_magenta_scalphunter",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1771689880281,
+      "tag": "0009_same_ironclad",
+      "breakpoints": true
     }
   ]
 }
