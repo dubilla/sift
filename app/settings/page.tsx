@@ -1,6 +1,8 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
+import TaskManagerPreference from "@/components/TaskManagerPreference";
 import AsanaSettings from "@/components/AsanaSettings";
+import TodoistSettings from "@/components/TodoistSettings";
 import Link from "next/link";
 import { SignOutButton } from "@/components/SignOutButton";
 import { ReconnectGoogleButton } from "@/components/ReconnectGoogleButton";
@@ -42,7 +44,9 @@ export default async function SettingsPage() {
         </div>
 
         <div className="space-y-6">
+          <TaskManagerPreference />
           <AsanaSettings />
+          <TodoistSettings />
 
           <div className="bg-white shadow rounded-lg p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">

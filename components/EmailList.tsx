@@ -7,6 +7,7 @@ import { useBackgroundSync } from "@/lib/hooks/useBackgroundSync";
 import { SyncProgress } from "./SyncProgress";
 import FilterModal from "./FilterModal";
 import CreateAsanaTaskModal from "./CreateAsanaTaskModal";
+import CreateTodoistTaskModal from "./CreateTodoistTaskModal";
 
 interface Thread {
   threadId: string;
@@ -78,6 +79,8 @@ export default function EmailList() {
     total: number;
   }>({ stage: "idle", total: 0 });
   const [openMenuThreadId, setOpenMenuThreadId] = useState<string | null>(null);
+  const [taskManager, setTaskManager] = useState<string>("asana");
+  const [todoistModalOpen, setTodoistModalOpen] = useState(false);
 
   const { syncState, startSync } = useBackgroundSync();
 
@@ -228,14 +231,18 @@ export default function EmailList() {
     setFilterModalOpen(true);
   };
 
-  const handleOpenAsanaModal = (thread: Thread) => {
+  const handleOpenTaskModal = (thread: Thread) => {
     setSelectedEmailForTask({
       id: thread.latestEmailId,
       subject: thread.subject,
       from: thread.from,
       snippet: thread.snippet,
     });
-    setAsanaModalOpen(true);
+    if (taskManager === "todoist") {
+      setTodoistModalOpen(true);
+    } else {
+      setAsanaModalOpen(true);
+    }
   };
 
   const handleCreateFilter = async (applyToExisting: boolean) => {
@@ -427,6 +434,17 @@ export default function EmailList() {
       }
     }
   };
+
+  useEffect(() => {
+    fetch("/api/user-settings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.settings?.taskManager) {
+          setTaskManager(data.settings.taskManager);
+        }
+      })
+      .catch((err) => console.error("Error loading task manager preference:", err));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -817,7 +835,7 @@ export default function EmailList() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleOpenAsanaModal(thread);
+                                handleOpenTaskModal(thread);
                                 setOpenMenuThreadId(null);
                               }}
                               className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
@@ -912,7 +930,7 @@ export default function EmailList() {
                       </button>
                     )}
                     <button
-                      onClick={() => handleOpenAsanaModal(thread)}
+                      onClick={() => handleOpenTaskModal(thread)}
                       className="hidden sm:flex p-1.5 sm:p-2 bg-pink-600 text-white hover:bg-pink-700 rounded-lg transition-all shadow-sm btn-action items-center justify-center"
                       title="Create task"
                     >
@@ -1033,6 +1051,14 @@ export default function EmailList() {
       <CreateAsanaTaskModal
         isOpen={asanaModalOpen}
         onClose={() => setAsanaModalOpen(false)}
+        emailSubject={selectedEmailForTask?.subject || ""}
+        emailFrom={selectedEmailForTask?.from || ""}
+        emailSnippet={selectedEmailForTask?.snippet || ""}
+        emailId={selectedEmailForTask?.id || ""}
+      />
+      <CreateTodoistTaskModal
+        isOpen={todoistModalOpen}
+        onClose={() => setTodoistModalOpen(false)}
         emailSubject={selectedEmailForTask?.subject || ""}
         emailFrom={selectedEmailForTask?.from || ""}
         emailSnippet={selectedEmailForTask?.snippet || ""}

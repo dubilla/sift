@@ -155,6 +155,41 @@ export const asanaTasks = pgTable("asana_tasks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// User preferences
+export const userSettings = pgTable("user_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  taskManager: varchar("task_manager", { length: 20 }).default("asana").notNull(), // 'asana' | 'todoist'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Todoist integration tables
+export const todoistSettings = pgTable("todoist_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  defaultProjectId: text("default_project_id"),
+  defaultProjectName: text("default_project_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const todoistTasks = pgTable("todoist_tasks", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  emailId: text("email_id").references(() => emails.id),
+  todoistTaskId: text("todoist_task_id").notNull(),
+  todoistTaskUrl: text("todoist_task_url"),
+  taskName: text("task_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Smart tagging tables
 export const tags = pgTable(
   "tags",
