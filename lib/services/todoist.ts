@@ -1,4 +1,4 @@
-const TODOIST_API_BASE = "https://api.todoist.com/rest/v2";
+const TODOIST_API_BASE = "https://api.todoist.com/api/v1";
 
 export interface TodoistProject {
   id: string;
@@ -37,7 +37,8 @@ async function todoistFetch<T>(
 export async function getProjects(
   accessToken: string
 ): Promise<TodoistProject[]> {
-  return todoistFetch<TodoistProject[]>(accessToken, "/projects");
+  const response = await todoistFetch<TodoistProject[] | { results: TodoistProject[] }>(accessToken, "/projects");
+  return Array.isArray(response) ? response : response.results;
 }
 
 export interface CreateTaskParams {
