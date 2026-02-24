@@ -76,8 +76,10 @@ export default function EmailList() {
   const [classifying, setClassifying] = useState(false);
   const [classifyStatus, setClassifyStatus] = useState<{
     stage: "idle" | "classifying" | "success";
+    classified: number;
     total: number;
-  }>({ stage: "idle", total: 0 });
+  }>({ stage: "idle", classified: 0, total: 0 });
+  const [unclassifiedCount, setUnclassifiedCount] = useState<number>(0);
   const [openMenuThreadId, setOpenMenuThreadId] = useState<string | null>(null);
   const [taskManager, setTaskManager] = useState<string>("asana");
   const [todoistModalOpen, setTodoistModalOpen] = useState(false);
@@ -91,6 +93,9 @@ export default function EmailList() {
       if (data.tags) {
         setTagStats(data.tags);
       }
+      if (typeof data.unclassified === "number") {
+        setUnclassifiedCount(data.unclassified);
+      }
     } catch (err) {
       console.error("Failed to fetch tag stats:", err);
     }
@@ -98,28 +103,67 @@ export default function EmailList() {
 
   const handleClassifyEmails = async (classifyAll: boolean = false) => {
     setClassifying(true);
-    setClassifyStatus({ stage: "classifying", total: classifyAll ? 0 : 50 });
+    setClassifyStatus({ stage: "classifying", classified: 0, total: 0 });
     try {
       const response = await fetch("/api/emails/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limit: 50, classifyAll }),
       });
-      const data = await response.json();
 
-      // Show success message
-      setClassifyStatus({ stage: "success", total: data.total || 0 });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Classification failed");
+      }
+      if (!response.body) throw new Error("No response body");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalClassified = 0;
+      let finalTotal = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.type === "start") {
+              setClassifyStatus({ stage: "classifying", classified: 0, total: event.total });
+              finalTotal = event.total;
+            } else if (event.type === "progress") {
+              setClassifyStatus({ stage: "classifying", classified: event.classified, total: event.total });
+              setUnclassifiedCount((prev) => Math.max(0, prev - (event.tag ? 1 : 0)));
+              finalClassified = event.classified;
+              finalTotal = event.total;
+            } else if (event.type === "done") {
+              finalClassified = event.classified;
+              finalTotal = event.total;
+            }
+          } catch {
+            // ignore malformed lines
+          }
+        }
+      }
+
+      setClassifyStatus({ stage: "success", classified: finalClassified, total: finalTotal });
 
       await fetchTagStats();
       await fetchThreads(1, false);
 
-      // Reset to idle after 3 seconds
       setTimeout(() => {
-        setClassifyStatus({ stage: "idle", total: 0 });
+        setClassifyStatus({ stage: "idle", classified: 0, total: 0 });
       }, 3000);
     } catch (err) {
       console.error("Failed to classify emails:", err);
-      setClassifyStatus({ stage: "idle", total: 0 });
+      setClassifyStatus({ stage: "idle", classified: 0, total: 0 });
     } finally {
       setClassifying(false);
     }
@@ -579,7 +623,11 @@ export default function EmailList() {
           {classifyStatus.stage === "classifying" ? (
             <>
               <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-white border-r-transparent"></span>
-              <span className="hidden sm:inline">Classifying{classifyStatus.total > 0 ? ` ${classifyStatus.total}` : "..."}</span>
+              <span className="hidden sm:inline">
+                {classifyStatus.total > 0
+                  ? `Classifying ${classifyStatus.classified} / ${classifyStatus.total}`
+                  : "Classifying..."}
+              </span>
               <span className="sm:hidden">Classifying</span>
             </>
           ) : classifyStatus.stage === "success" ? (
@@ -587,7 +635,7 @@ export default function EmailList() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
-              <span className="hidden sm:inline">Classified {classifyStatus.total}</span>
+              <span className="hidden sm:inline">Classified {classifyStatus.classified}</span>
               <span className="sm:hidden">Done</span>
             </>
           ) : (
@@ -613,7 +661,11 @@ export default function EmailList() {
           {classifyStatus.stage === "classifying" ? (
             <>
               <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-white border-r-transparent"></span>
-              <span className="hidden sm:inline">Classifying{classifyStatus.total > 0 ? ` ${classifyStatus.total}` : "..."}</span>
+              <span className="hidden sm:inline">
+                {classifyStatus.total > 0
+                  ? `Classifying ${classifyStatus.classified} / ${classifyStatus.total}`
+                  : "Classifying..."}
+              </span>
               <span className="sm:hidden">All</span>
             </>
           ) : classifyStatus.stage === "success" ? (
@@ -621,7 +673,7 @@ export default function EmailList() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
-              <span className="hidden sm:inline">Classified {classifyStatus.total}</span>
+              <span className="hidden sm:inline">Classified {classifyStatus.classified}</span>
               <span className="sm:hidden">Done</span>
             </>
           ) : (
@@ -670,6 +722,26 @@ export default function EmailList() {
               )}
             </button>
           ))}
+          {unclassifiedCount > 0 && (
+            <button
+              onClick={() => handleTagFilterChange("unclassified")}
+              className={`px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all shadow-sm btn-action flex items-center gap-1.5 ${
+                activeTagFilter === "unclassified"
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200"
+              }`}
+            >
+              <span className="text-sm hidden sm:inline">❓</span>
+              <span>Unclassified</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
+                activeTagFilter === "unclassified"
+                  ? "bg-white/30 text-white"
+                  : "bg-slate-100 text-slate-500"
+              }`}>
+                {unclassifiedCount}
+              </span>
+            </button>
+          )}
         </div>
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">

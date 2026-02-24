@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { emails, emailTags, tags } from "@/db/schema";
-import { and, eq, isNull, desc, sql } from "drizzle-orm";
+import { and, eq, isNull, desc, sql, notExists, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -28,7 +28,11 @@ export async function GET(request: Request) {
 
     // If filtering by tag, we need to get the email IDs that have that tag
     let taggedEmailIds: string[] | null = null;
-    if (tagFilter) {
+    let unclassifiedFilter = false;
+
+    if (tagFilter === "unclassified") {
+      unclassifiedFilter = true;
+    } else if (tagFilter) {
       // Find the tag
       const tag = await db
         .select()
@@ -183,7 +187,16 @@ export async function GET(request: Request) {
         taggedEmailIds
           ? and(
               whereCondition,
-              sql`${emails.id} IN (${sql.raw(taggedEmailIds.map((id) => `'${id}'`).join(","))})`
+              inArray(emails.id, taggedEmailIds)
+            )
+          : unclassifiedFilter
+          ? and(
+              whereCondition,
+              notExists(
+                db.select({ emailId: emailTags.emailId })
+                  .from(emailTags)
+                  .where(eq(emailTags.emailId, emails.id))
+              )
             )
           : whereCondition
       )
