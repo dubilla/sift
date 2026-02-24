@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { emails, emailTags, tags } from "@/db/schema";
 import { classifyEmail, CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
-import { eq, and, isNull, inArray, desc, sql } from "drizzle-orm";
+import { eq, and, isNull, inArray, desc, sql, notExists } from "drizzle-orm";
 
 export async function POST(request: Request) {
   try {
@@ -35,16 +35,6 @@ export async function POST(request: Request) {
         )
         .limit(limit);
     } else {
-      const classifiedEmailIds = await db
-        .select({ emailId: emailTags.emailId })
-        .from(emailTags)
-        .innerJoin(emails, eq(emailTags.emailId, emails.id))
-        .where(eq(emails.userId, session.user.id));
-
-      const classifiedIds = new Set(classifiedEmailIds.map((r) => r.emailId));
-
-      const fetchLimit = classifyAll ? 10000 : limit * 3;
-
       emailsToClassify = await db
         .select()
         .from(emails)
@@ -52,15 +42,17 @@ export async function POST(request: Request) {
           and(
             eq(emails.userId, session.user.id),
             isNull(emails.archivedAt),
-            isNull(emails.deletedAt)
+            isNull(emails.deletedAt),
+            notExists(
+              db
+                .select({ emailId: emailTags.emailId })
+                .from(emailTags)
+                .where(eq(emailTags.emailId, emails.id))
+            )
           )
         )
         .orderBy(desc(emails.date))
-        .limit(fetchLimit);
-
-      emailsToClassify = emailsToClassify
-        .filter((e) => !classifiedIds.has(e.id))
-        .slice(0, classifyAll ? emailsToClassify.length : limit);
+        .limit(classifyAll ? 10000 : limit);
     }
 
     const allTags = await db.select().from(tags);

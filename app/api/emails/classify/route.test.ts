@@ -53,6 +53,7 @@ vi.mock("drizzle-orm", () => ({
   isNull: vi.fn((col) => ({ type: "isNull", col })),
   inArray: vi.fn((col, vals) => ({ type: "inArray", col, vals })),
   desc: vi.fn((col) => ({ type: "desc", col })),
+  notExists: vi.fn((subquery) => ({ type: "notExists", subquery })),
   sql: Object.assign(
     vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ type: "sql", strings, values })),
     { raw: vi.fn((s: string) => s) }
@@ -98,28 +99,26 @@ const MOCK_EMAIL = {
 const MOCK_TAG = { id: "tag-1", name: "newsletter", displayName: "Newsletter", color: null, icon: null };
 
 function mockSelectChains({
-  classifiedIds = [] as { emailId: string }[],
   emailsToClassify = [MOCK_EMAIL],
   allTags = [MOCK_TAG],
 } = {}) {
-  // Call 1: get classified email IDs — chain: .from().innerJoin().where()
-  const chain1Where = vi.fn().mockResolvedValue(classifiedIds);
-  const chain1InnerJoin = vi.fn(() => ({ where: chain1Where }));
-  const chain1From = vi.fn(() => ({ innerJoin: chain1InnerJoin }));
+  // Call 1: get unclassified emails via notExists subquery — chain: .from().where().orderBy().limit()
+  const chain1Limit = vi.fn().mockResolvedValue(emailsToClassify);
+  const chain1OrderBy = vi.fn(() => ({ limit: chain1Limit }));
+  const chain1Where = vi.fn(() => ({ orderBy: chain1OrderBy }));
+  const chain1From = vi.fn(() => ({ where: chain1Where }));
 
-  // Call 2: get emails to classify — chain: .from().where().orderBy().limit()
-  const chain2Limit = vi.fn().mockResolvedValue(emailsToClassify);
-  const chain2OrderBy = vi.fn(() => ({ limit: chain2Limit }));
-  const chain2Where = vi.fn(() => ({ orderBy: chain2OrderBy }));
-  const chain2From = vi.fn(() => ({ where: chain2Where }));
+  // Call 2: get all tags — chain: .from()
+  const chain2From = vi.fn().mockResolvedValue(allTags);
 
-  // Call 3: get all tags — chain: .from()
-  const chain3From = vi.fn().mockResolvedValue(allTags);
+  // notExists subquery — chain: .from().where()
+  const subqueryWhere = vi.fn().mockReturnValue({});
+  const subqueryFrom = vi.fn(() => ({ where: subqueryWhere }));
 
   vi.mocked(db.select)
-    .mockReturnValueOnce({ from: chain1From } as any)
-    .mockReturnValueOnce({ from: chain2From } as any)
-    .mockReturnValueOnce({ from: chain3From } as any);
+    .mockReturnValueOnce({ from: chain1From } as any)   // outer emails query (chain starts first)
+    .mockReturnValueOnce({ from: subqueryFrom } as any) // notExists inner select (evaluated as .where() arg)
+    .mockReturnValueOnce({ from: chain2From } as any);  // all tags
 
   // Mock insert chain
   const mockOnConflictDoNothing = vi.fn().mockResolvedValue(undefined);
@@ -208,7 +207,7 @@ describe("POST /api/emails/classify", () => {
     vi.mocked(auth).mockResolvedValue({ user: { id: "user123" } } as any);
 
     const lowConfidenceEmail = { ...MOCK_EMAIL, id: "email-2" };
-    mockSelectChains({ emailsToClassify: [MOCK_EMAIL, lowConfidenceEmail] });
+    mockSelectChains({ emailsToClassify: [MOCK_EMAIL, lowConfidenceEmail] }); // DB returns both, notExists applied at DB level
 
     vi.mocked(classifyEmail)
       .mockResolvedValueOnce({ tag: "newsletter", confidence: 0.9, source: "ai" } as any) // above threshold
@@ -235,11 +234,8 @@ describe("POST /api/emails/classify", () => {
   it("streams done with 0 when no unclassified emails exist", async () => {
     vi.mocked(auth).mockResolvedValue({ user: { id: "user123" } } as any);
 
-    // All emails already classified
-    mockSelectChains({
-      classifiedIds: [{ emailId: "email-1" }],
-      emailsToClassify: [MOCK_EMAIL],
-    });
+    // DB returns empty list because all emails are already classified (notExists filters them out)
+    mockSelectChains({ emailsToClassify: [] });
 
     const request = new Request("http://localhost/api/emails/classify", {
       method: "POST",
@@ -250,7 +246,7 @@ describe("POST /api/emails/classify", () => {
     const response = await POST(request);
     const events = await readNDJSONEvents(response);
 
-    // Only a done event — no start or progress since filtered list is empty
+    // Only a done event — no start or progress since the DB returned nothing
     const doneEvent = events.find((e) => e.type === "done");
     expect(doneEvent).toBeDefined();
     expect(doneEvent!.classified).toBe(0);
