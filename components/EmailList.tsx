@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatEmailDate, parseFromHeader } from "@/lib/utils/email";
 import EmailMessage from "./EmailMessage";
 import { useBackgroundSync } from "@/lib/hooks/useBackgroundSync";
@@ -73,12 +73,14 @@ export default function EmailList() {
   } | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [tagStats, setTagStats] = useState<TagStats[]>([]);
+  const classifyAbortRef = useRef<AbortController | null>(null);
   const [classifying, setClassifying] = useState(false);
   const [classifyStatus, setClassifyStatus] = useState<{
     stage: "idle" | "classifying" | "success";
     classified: number;
     total: number;
-  }>({ stage: "idle", classified: 0, total: 0 });
+    activeButton: "batch" | "all" | null;
+  }>({ stage: "idle", classified: 0, total: 0, activeButton: null });
   const [unclassifiedCount, setUnclassifiedCount] = useState<number>(0);
   const [openMenuThreadId, setOpenMenuThreadId] = useState<string | null>(null);
   const [taskManager, setTaskManager] = useState<string>("asana");
@@ -101,14 +103,27 @@ export default function EmailList() {
     }
   };
 
+  const handleStopClassification = () => {
+    classifyAbortRef.current?.abort();
+  };
+
   const handleClassifyEmails = async (classifyAll: boolean = false) => {
+    const abortController = new AbortController();
+    classifyAbortRef.current = abortController;
+
     setClassifying(true);
-    setClassifyStatus({ stage: "classifying", classified: 0, total: 0 });
+    setClassifyStatus({ stage: "classifying", classified: 0, total: 0, activeButton: classifyAll ? "all" : "batch" });
+
+    let finalClassified = 0;
+    let finalTotal = 0;
+    const activeButton = classifyAll ? "all" : "batch";
+
     try {
       const response = await fetch("/api/emails/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limit: 50, classifyAll }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -120,8 +135,6 @@ export default function EmailList() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let finalClassified = 0;
-      let finalTotal = 0;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -136,10 +149,10 @@ export default function EmailList() {
           try {
             const event = JSON.parse(line);
             if (event.type === "start") {
-              setClassifyStatus({ stage: "classifying", classified: 0, total: event.total });
+              setClassifyStatus({ stage: "classifying", classified: 0, total: event.total, activeButton });
               finalTotal = event.total;
             } else if (event.type === "progress") {
-              setClassifyStatus({ stage: "classifying", classified: event.classified, total: event.total });
+              setClassifyStatus({ stage: "classifying", classified: event.classified, total: event.total, activeButton });
               setUnclassifiedCount((prev) => Math.max(0, prev - (event.tag ? 1 : 0)));
               finalClassified = event.classified;
               finalTotal = event.total;
@@ -152,20 +165,25 @@ export default function EmailList() {
           }
         }
       }
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        console.error("Failed to classify emails:", err);
+      }
+    } finally {
+      classifyAbortRef.current = null;
+      setClassifying(false);
+    }
 
-      setClassifyStatus({ stage: "success", classified: finalClassified, total: finalTotal });
-
+    // Show success (or partial success if stopped early) if anything was classified
+    if (finalClassified > 0 || finalTotal > 0) {
+      setClassifyStatus({ stage: "success", classified: finalClassified, total: finalTotal, activeButton });
       await fetchTagStats();
       await fetchThreads(1, false);
-
       setTimeout(() => {
-        setClassifyStatus({ stage: "idle", classified: 0, total: 0 });
+        setClassifyStatus({ stage: "idle", classified: 0, total: 0, activeButton: null });
       }, 3000);
-    } catch (err) {
-      console.error("Failed to classify emails:", err);
-      setClassifyStatus({ stage: "idle", classified: 0, total: 0 });
-    } finally {
-      setClassifying(false);
+    } else {
+      setClassifyStatus({ stage: "idle", classified: 0, total: 0, activeButton: null });
     }
   };
 
@@ -610,82 +628,107 @@ export default function EmailList() {
         isSyncing={syncState.isSyncing}
       />
       <div className="mb-3 flex justify-end gap-2">
-        <button
-          onClick={() => handleClassifyEmails(false)}
-          disabled={classifying}
-          className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm btn-action ${
-            classifyStatus.stage === "success"
-              ? "bg-green-600 text-white"
-              : "bg-purple-600 text-white hover:bg-purple-700"
-          }`}
-          title="Classify next 50 untagged emails using AI"
-        >
-          {classifyStatus.stage === "classifying" ? (
-            <>
-              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-white border-r-transparent"></span>
-              <span className="hidden sm:inline">
-                {classifyStatus.total > 0
-                  ? `Classifying ${classifyStatus.classified} / ${classifyStatus.total}`
-                  : "Classifying..."}
-              </span>
-              <span className="sm:hidden">Classifying</span>
-            </>
-          ) : classifyStatus.stage === "success" ? (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="hidden sm:inline">Classified {classifyStatus.classified}</span>
-              <span className="sm:hidden">Done</span>
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-              <span className="hidden sm:inline">Classify 50</span>
-              <span className="sm:hidden">Classify</span>
-            </>
-          )}
-        </button>
-        <button
-          onClick={() => handleClassifyEmails(true)}
-          disabled={classifying}
-          className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm btn-action ${
-            classifyStatus.stage === "success"
-              ? "bg-green-600 text-white"
-              : "bg-indigo-600 text-white hover:bg-indigo-700"
-          }`}
-          title="Classify ALL untagged emails using AI (may take a while)"
-        >
-          {classifyStatus.stage === "classifying" ? (
-            <>
-              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-white border-r-transparent"></span>
-              <span className="hidden sm:inline">
-                {classifyStatus.total > 0
-                  ? `Classifying ${classifyStatus.classified} / ${classifyStatus.total}`
-                  : "Classifying..."}
-              </span>
-              <span className="sm:hidden">All</span>
-            </>
-          ) : classifyStatus.stage === "success" ? (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="hidden sm:inline">Classified {classifyStatus.classified}</span>
-              <span className="sm:hidden">Done</span>
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <span className="hidden sm:inline">Classify All</span>
-              <span className="sm:hidden">All</span>
-            </>
-          )}
-        </button>
+        {/* Stop button — appears during classification */}
+        {classifyStatus.stage === "classifying" && (
+          <button
+            onClick={handleStopClassification}
+            className="px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 shadow-sm bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400"
+            title="Stop classification"
+          >
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+            </svg>
+            <span className="hidden sm:inline">Stop</span>
+          </button>
+        )}
+
+        {/* Classify 50 button — grays out when Classify All is active */}
+        {classifyStatus.activeButton !== "all" && (
+          <button
+            onClick={() => handleClassifyEmails(false)}
+            disabled={classifying}
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm btn-action ${
+              classifyStatus.stage === "success" && classifyStatus.activeButton === "batch"
+                ? "bg-green-600 text-white"
+                : classifyStatus.activeButton === "batch"
+                ? "bg-purple-600 text-white"
+                : "bg-purple-600 text-white hover:bg-purple-700"
+            }`}
+            title="Classify next 50 untagged emails using AI"
+          >
+            {classifyStatus.stage === "classifying" && classifyStatus.activeButton === "batch" ? (
+              <>
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-white border-r-transparent"></span>
+                <span className="hidden sm:inline">
+                  {classifyStatus.total > 0
+                    ? `Classifying ${classifyStatus.classified} / ${classifyStatus.total}`
+                    : "Classifying..."}
+                </span>
+                <span className="sm:hidden">Classifying</span>
+              </>
+            ) : classifyStatus.stage === "success" && classifyStatus.activeButton === "batch" ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="hidden sm:inline">Classified {classifyStatus.classified}</span>
+                <span className="sm:hidden">Done</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                <span className="hidden sm:inline">Classify 50</span>
+                <span className="sm:hidden">Classify</span>
+              </>
+            )}
+          </button>
+        )}
+
+        {/* Classify All button — grays out when Classify 50 is active */}
+        {classifyStatus.activeButton !== "batch" && (
+          <button
+            onClick={() => handleClassifyEmails(true)}
+            disabled={classifying}
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm btn-action ${
+              classifyStatus.stage === "success" && classifyStatus.activeButton === "all"
+                ? "bg-green-600 text-white"
+                : classifyStatus.activeButton === "all"
+                ? "bg-indigo-600 text-white"
+                : "bg-indigo-600 text-white hover:bg-indigo-700"
+            }`}
+            title="Classify ALL untagged emails using AI (may take a while)"
+          >
+            {classifyStatus.stage === "classifying" && classifyStatus.activeButton === "all" ? (
+              <>
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-white border-r-transparent"></span>
+                <span className="hidden sm:inline">
+                  {classifyStatus.total > 0
+                    ? `Classifying ${classifyStatus.classified} / ${classifyStatus.total}`
+                    : "Classifying..."}
+                </span>
+                <span className="sm:hidden">Classifying</span>
+              </>
+            ) : classifyStatus.stage === "success" && classifyStatus.activeButton === "all" ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="hidden sm:inline">Classified {classifyStatus.classified}</span>
+                <span className="sm:hidden">Done</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span className="hidden sm:inline">Classify All</span>
+                <span className="sm:hidden">All</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-3 p-3">
         <div className="flex items-center gap-2 flex-wrap">
