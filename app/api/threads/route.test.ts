@@ -21,6 +21,16 @@ vi.mock("@/db/schema", () => ({
     userId: "userId",
     archivedAt: "archivedAt",
     deletedAt: "deletedAt",
+    id: "id",
+  },
+  emailTags: {
+    emailId: "emailId",
+    tagId: "tagId",
+    confidence: "confidence",
+  },
+  tags: {
+    id: "id",
+    name: "name",
   },
 }));
 
@@ -29,6 +39,8 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...args) => ({ type: "and", args })),
   isNull: vi.fn((col) => ({ type: "isNull", col })),
   desc: vi.fn((col) => ({ type: "desc", col })),
+  inArray: vi.fn((col, vals) => ({ type: "inArray", col, vals })),
+  notExists: vi.fn((subq) => ({ type: "notExists", subq })),
   sql: vi.fn((strings, ...values) => ({
     type: "sql",
     strings,
@@ -270,5 +282,81 @@ describe("GET /api/threads", () => {
 
     expect(response.status).toBe(500);
     expect(data.error).toBe("Failed to fetch threads");
+  });
+
+  it("applies notExists filter when tag=unclassified", async () => {
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user123" },
+    } as any);
+
+    const mockThreads = [
+      {
+        threadId: "thread-unclassified",
+        subject: "Unclassified Email",
+        from: "sender@example.com",
+        snippet: "No tag on this one",
+        date: new Date("2024-01-15"),
+        messageCount: 1,
+        smartTag: null,
+        smartTagIcon: null,
+        smartTagColor: null,
+      },
+    ];
+
+    const mockOffset = vi.fn().mockResolvedValue(mockThreads);
+    const mockLimit = vi.fn(() => ({ offset: mockOffset }));
+    const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
+    const mockGroupBy = vi.fn(() => ({ orderBy: mockOrderBy }));
+    const mockWhere = vi.fn(() => ({ groupBy: mockGroupBy }));
+    const mockFrom = vi.fn(() => ({ where: mockWhere }));
+
+    // Mock subquery chain for notExists
+    // Call order: db.select() for main query fires first (call 1), then
+    // db.select() inside the notExists() argument fires second (call 2)
+    const subqueryWhere = vi.fn().mockReturnValue({ type: "subquery" });
+    const subqueryFrom = vi.fn(() => ({ where: subqueryWhere }));
+    vi.mocked(db.select)
+      .mockReturnValueOnce({ from: mockFrom } as any)     // call 1: main threads query
+      .mockReturnValueOnce({ from: subqueryFrom } as any); // call 2: notExists subquery
+
+    const { notExists } = await import("drizzle-orm");
+
+    const request = new Request("http://localhost/api/threads?tag=unclassified");
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.threads).toHaveLength(1);
+    expect(data.threads[0].threadId).toBe("thread-unclassified");
+
+    // Verify notExists was called (the unclassified filter was applied)
+    expect(notExists).toHaveBeenCalled();
+  });
+
+  it("returns empty array for unclassified filter when all emails are tagged", async () => {
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user123" },
+    } as any);
+
+    const mockOffset = vi.fn().mockResolvedValue([]);
+    const mockLimit = vi.fn(() => ({ offset: mockOffset }));
+    const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
+    const mockGroupBy = vi.fn(() => ({ orderBy: mockOrderBy }));
+    const mockWhere = vi.fn(() => ({ groupBy: mockGroupBy }));
+    const mockFrom = vi.fn(() => ({ where: mockWhere }));
+
+    const subqueryWhere = vi.fn().mockReturnValue({ type: "subquery" });
+    const subqueryFrom = vi.fn(() => ({ where: subqueryWhere }));
+    vi.mocked(db.select)
+      .mockReturnValueOnce({ from: mockFrom } as any)     // call 1: main threads query
+      .mockReturnValueOnce({ from: subqueryFrom } as any); // call 2: notExists subquery
+
+    const request = new Request("http://localhost/api/threads?tag=unclassified");
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.threads).toEqual([]);
+    expect(data.hasMore).toBe(false);
   });
 });
