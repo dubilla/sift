@@ -8,7 +8,7 @@ import { classificationCorrections, tags } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { areSimilar, SIMILARITY_THRESHOLD } from "./similarity";
 
-export type SmartTag = "archivable" | "quick_action" | "asana_task" | "unsubscribable";
+export type SmartTag = "archivable" | "quick_action" | "asana_task" | "unsubscribable" | "send_to_reader";
 
 export interface ClassificationResult {
   tag: SmartTag | null;
@@ -220,7 +220,7 @@ export async function patternClassify(
           .where(eq(tags.id, correction.newTagId))
           .limit(1);
 
-        if (tag && (tag.name === "archivable" || tag.name === "quick_action" || tag.name === "asana_task" || tag.name === "unsubscribable")) {
+        if (tag && (tag.name === "archivable" || tag.name === "quick_action" || tag.name === "asana_task" || tag.name === "unsubscribable" || tag.name === "send_to_reader")) {
           return {
             tag: tag.name as SmartTag,
             confidence: 0.85, // High confidence from user correction
@@ -253,6 +253,7 @@ Categories:
 - QUICK_ACTION: Needs brief response, RSVP, simple confirmation, quick decision (< 2 min to handle)
 - ASANA_TASK: Represents real work - requests needing follow-up, assignments, projects, complex decisions
 - UNSUBSCRIBABLE: Clearly unwanted marketing or spam the user likely wants to stop receiving
+- SEND_TO_READER: Contains an article, blog post, or interesting link worth reading later (e.g. newsletters with article links, shared articles, reading recommendations)
 
 Email:
 From: ${email.from}
@@ -263,7 +264,7 @@ Is from mailing list: ${!!email.listId}
 Is from noreply address: ${email.isNoreply}
 
 Respond with ONLY valid JSON (no markdown):
-{"tag": "archivable|quick_action|asana_task|unsubscribable", "confidence": 0.0-1.0, "reason": "brief explanation"}`;
+{"tag": "archivable|quick_action|asana_task|unsubscribable|send_to_reader", "confidence": 0.0-1.0, "reason": "brief explanation"}`;
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -300,7 +301,7 @@ Respond with ONLY valid JSON (no markdown):
     const parsed = JSON.parse(content);
 
     // Validate and normalize
-    const validTags: SmartTag[] = ["archivable", "quick_action", "asana_task", "unsubscribable"];
+    const validTags: SmartTag[] = ["archivable", "quick_action", "asana_task", "unsubscribable", "send_to_reader"];
     const tag = parsed.tag?.toLowerCase() as SmartTag;
 
     if (!validTags.includes(tag)) {

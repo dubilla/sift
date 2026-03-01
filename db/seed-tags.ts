@@ -42,6 +42,15 @@ const initialTags = [
     icon: "🗑️",
     sortOrder: 4,
   },
+  {
+    id: crypto.randomUUID(),
+    name: "send_to_reader",
+    displayName: "Send to Reader",
+    description: "Contains a link worth reading later - save to Readwise Reader",
+    color: "yellow",
+    icon: "📖",
+    sortOrder: 5,
+  },
 ];
 
 const seedTags = async () => {

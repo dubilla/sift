@@ -190,6 +190,29 @@ export const todoistTasks = pgTable("todoist_tasks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Reader integration tables
+export const readerSettings = pgTable("reader_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  apiToken: text("api_token").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const readerSaves = pgTable("reader_saves", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  emailId: text("email_id").references(() => emails.id),
+  url: text("url").notNull(),
+  readerDocumentId: text("reader_document_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Smart tagging tables
 export const tags = pgTable(
   "tags",
@@ -197,7 +220,7 @@ export const tags = pgTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    name: text("name").notNull().unique(), // 'archivable', 'quick_action', 'asana_task', 'unsubscribable'
+    name: text("name").notNull().unique(), // 'archivable', 'quick_action', 'asana_task', 'unsubscribable', 'send_to_reader'
     displayName: text("display_name").notNull(), // 'Archive', 'Quick Action', etc.
     description: text("description"), // Help text for the tag
     color: text("color"), // Tailwind color class or hex

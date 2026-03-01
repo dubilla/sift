@@ -8,6 +8,7 @@ import { SyncProgress } from "./SyncProgress";
 import FilterModal from "./FilterModal";
 import CreateAsanaTaskModal from "./CreateAsanaTaskModal";
 import CreateTodoistTaskModal from "./CreateTodoistTaskModal";
+import SendToReaderModal from "./SendToReaderModal";
 
 interface Thread {
   threadId: string;
@@ -85,6 +86,13 @@ export default function EmailList() {
   const [openMenuThreadId, setOpenMenuThreadId] = useState<string | null>(null);
   const [taskManager, setTaskManager] = useState<string>("asana");
   const [todoistModalOpen, setTodoistModalOpen] = useState(false);
+  const [readerModalOpen, setReaderModalOpen] = useState(false);
+  const [selectedEmailForReader, setSelectedEmailForReader] = useState<{
+    id: string;
+    subject: string;
+    from: string;
+  } | null>(null);
+  const [readerConnected, setReaderConnected] = useState(false);
 
   const { syncState, startSync } = useBackgroundSync();
 
@@ -307,6 +315,15 @@ export default function EmailList() {
     }
   };
 
+  const handleOpenReaderModal = (thread: Thread) => {
+    setSelectedEmailForReader({
+      id: thread.latestEmailId,
+      subject: thread.subject,
+      from: thread.from,
+    });
+    setReaderModalOpen(true);
+  };
+
   const handleCreateFilter = async (applyToExisting: boolean) => {
     if (!selectedSender) return;
 
@@ -506,6 +523,13 @@ export default function EmailList() {
         }
       })
       .catch((err) => console.error("Error loading task manager preference:", err));
+
+    fetch("/api/reader/status")
+      .then((res) => res.json())
+      .then((data) => {
+        setReaderConnected(data.connected);
+      })
+      .catch((err) => console.error("Error loading reader status:", err));
   }, []);
 
   useEffect(() => {
@@ -966,6 +990,21 @@ export default function EmailList() {
                               )}
                               Create task
                             </button>
+                            {readerConnected && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenReaderModal(thread);
+                                  setOpenMenuThreadId(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-yellow-700 hover:bg-yellow-50 flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                </svg>
+                                Send to Reader
+                              </button>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1069,6 +1108,27 @@ export default function EmailList() {
                         </svg>
                       )}
                     </button>
+                    {readerConnected && (
+                      <button
+                        onClick={() => handleOpenReaderModal(thread)}
+                        className="hidden sm:flex p-1.5 sm:p-2 bg-yellow-500 text-white hover:bg-yellow-600 rounded-lg transition-all shadow-sm btn-action items-center justify-center"
+                        title="Send to Reader"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          strokeWidth={2.5}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                          />
+                        </svg>
+                      </button>
+                    )}
                     <button
                       onClick={() => handleOpenFilterModal(thread.from)}
                       className="hidden sm:flex p-1.5 sm:p-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition-all shadow-sm btn-action items-center justify-center"
@@ -1190,6 +1250,13 @@ export default function EmailList() {
         emailFrom={selectedEmailForTask?.from || ""}
         emailSnippet={selectedEmailForTask?.snippet || ""}
         emailId={selectedEmailForTask?.id || ""}
+      />
+      <SendToReaderModal
+        isOpen={readerModalOpen}
+        onClose={() => setReaderModalOpen(false)}
+        emailId={selectedEmailForReader?.id || ""}
+        emailSubject={selectedEmailForReader?.subject || ""}
+        emailFrom={selectedEmailForReader?.from || ""}
       />
     </>
   );
