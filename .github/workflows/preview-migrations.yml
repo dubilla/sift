@@ -1,0 +1,55 @@
+name: Preview Migrations
+
+on:
+  deployment_status:
+
+jobs:
+  migrate:
+    name: Run migrations on Neon preview branch
+    if: |
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'Preview'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Get PR number
+        id: pr
+        run: |
+          REF="${{ github.event.deployment.ref }}"
+          BRANCH="${REF##refs/heads/}"
+          PR_NUMBER=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:${BRANCH}&state=open" \
+            | jq -r '.[0].number')
+          echo "number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+
+      - name: Get Neon branch connection string
+        id: neon
+        run: |
+          BRANCH_NAME="preview/pr-${{ steps.pr.outputs.number }}"
+          BRANCH_ID=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
+            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches" \
+            | jq -r --arg name "$BRANCH_NAME" '.branches[] | select(.name == $name) | .id')
+          POSTGRES_URL=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
+            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/connection_uri?branch_id=${BRANCH_ID}&pooled=true" \
+            | jq -r '.uri')
+          echo "postgres_url=${POSTGRES_URL}" >> $GITHUB_OUTPUT
+
+      - name: Run migrations
+        env:
+          POSTGRES_URL: ${{ steps.neon.outputs.postgres_url }}
+        run: npm run db:migrate
