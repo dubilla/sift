@@ -44,6 +44,7 @@ export const accounts = pgTable(
     compoundKey: primaryKey({
       columns: [account.provider, account.providerAccountId],
     }),
+    userIdIdx: index("idx_accounts_user_id").on(account.userId),
   })
 );
 
