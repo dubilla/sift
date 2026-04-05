@@ -7,6 +7,9 @@ import ApplySimilarModal from "./ApplySimilarModal";
 
 const PAGE_SIZE = 25;
 
+// Ordered from highest-volume/easiest to review -> lowest
+const TAG_REVIEW_ORDER = ["archivable", "unsubscribable", "asana_task", "quick_action"];
+
 // Map tag names to their default actions
 const TAG_ACTION_MAP: Record<string, "archive" | "unsubscribe" | "create_task" | null> = {
   archivable: "archive",
@@ -72,17 +75,51 @@ export default function ReviewEmailList() {
     newTagIcon: string | null;
   } | null>(null);
 
-  const fetchTags = async () => {
+  // Fetch tags + counts, then auto-select the first tag with emails
+  const fetchTagsAndAutoSelect = async () => {
     try {
       const response = await fetch("/api/emails/classify");
       const data = await response.json();
       if (data.tags) {
         setAllTags(data.tags);
+
+        // Build a count map by tag name
+        const countByName: Record<string, number> = {};
+        for (const tag of data.tags) {
+          countByName[tag.name] = tag.count || 0;
+        }
+
+        // Auto-select the first tag (in review order) that has emails,
+        // but only if the user hasn't manually picked a filter yet
+        if (tagFilter === null) {
+          const firstWithEmails = TAG_REVIEW_ORDER.find(
+            (name) => (countByName[name] || 0) > 0
+          );
+          if (firstWithEmails) {
+            setTagFilter(firstWithEmails);
+          }
+        }
       }
     } catch (err) {
       console.error("Failed to fetch tags:", err);
     }
   };
+
+  // Advance to the next tag in review order that has remaining emails
+  const advanceToNextTag = useCallback(() => {
+    if (!tagFilter) return false;
+    const currentIdx = TAG_REVIEW_ORDER.indexOf(tagFilter);
+    if (currentIdx === -1) return false;
+
+    // Find the next tag in order (we'll let fetchEmails discover if it has emails)
+    for (let i = currentIdx + 1; i < TAG_REVIEW_ORDER.length; i++) {
+      const nextTag = TAG_REVIEW_ORDER[i];
+      setTagFilter(nextTag);
+      setPage(1);
+      return true;
+    }
+    return false; // No more tags
+  }, [tagFilter]);
 
   const fetchEmails = useCallback(
     async (pageNum: number = 1) => {
@@ -111,6 +148,19 @@ export default function ReviewEmailList() {
         const data = await response.json();
 
         if (data.emails) {
+          // If page is empty and we're filtering by tag, auto-advance to next tag
+          if (data.emails.length === 0 && tagFilter && pageNum === 1) {
+            const advanced = advanceToNextTag();
+            if (!advanced) {
+              // No more tags with emails - show the empty state
+              setEmails([]);
+              setHasMore(false);
+              setPage(1);
+              setLoading(false);
+            }
+            return;
+          }
+
           setEmails(data.emails);
           setHasMore(data.hasMore);
           setPage(pageNum);
@@ -124,7 +174,7 @@ export default function ReviewEmailList() {
         setLoading(false);
       }
     },
-    [tagFilter, needsReview]
+    [tagFilter, needsReview, advanceToNextTag]
   );
 
   // Correct a single email's tag (persists to backend + triggers similar modal)
@@ -290,9 +340,10 @@ export default function ReviewEmailList() {
         failed: data.summary.failed,
       });
 
-      // After a short delay, load the next page
+      // After a short delay, reload the current page (which will auto-advance
+      // to the next tag if this tag is now empty)
       setTimeout(() => {
-        fetchEmails(page);
+        fetchEmails(1);
       }, 1500);
     } catch (err) {
       console.error("Error executing batch actions:", err);
@@ -311,7 +362,7 @@ export default function ReviewEmailList() {
   };
 
   useEffect(() => {
-    fetchTags();
+    fetchTagsAndAutoSelect();
   }, []);
 
   useEffect(() => {
@@ -341,31 +392,58 @@ export default function ReviewEmailList() {
 
   return (
     <div>
-      {/* Filter controls */}
+      {/* Tag review steps */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Filter by Tag
-            </label>
-            <select
-              value={tagFilter || ""}
-              onChange={(e) => {
-                setTagFilter(e.target.value || null);
+        <div className="flex flex-col gap-3">
+          {/* Step indicators */}
+          <div className="flex items-center gap-2">
+            {TAG_REVIEW_ORDER.map((tagName, idx) => {
+              const tag = allTags.find((t) => t.name === tagName);
+              const isActive = tagFilter === tagName;
+              const isPast = tagFilter
+                ? TAG_REVIEW_ORDER.indexOf(tagFilter) > idx
+                : false;
+              return (
+                <button
+                  key={tagName}
+                  onClick={() => {
+                    setTagFilter(tagName);
+                    setPage(1);
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                    isActive
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : isPast
+                      ? "bg-green-50 text-green-700 border-green-200"
+                      : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  {isPast && !isActive && (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  <span>{tag?.icon}</span>
+                  <span>{tag?.displayName || tagName}</span>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => {
+                setTagFilter(null);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                tagFilter === null
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+              }`}
             >
-              <option value="">All Tags</option>
-              {allTags.map((tag) => (
-                <option key={tag.id} value={tag.name}>
-                  {tag.icon} {tag.displayName}
-                </option>
-              ))}
-            </select>
+              All
+            </button>
           </div>
 
-          <div className="flex items-end">
+          <div className="flex items-center">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -478,7 +556,23 @@ export default function ReviewEmailList() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 divide-y divide-gray-200">
         {emails.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            No classified emails found.
+            {tagFilter ? (
+              <>
+                No {allTags.find((t) => t.name === tagFilter)?.displayName || tagFilter} emails to review.
+                <button
+                  onClick={() => {
+                    if (!advanceToNextTag()) {
+                      setTagFilter(null);
+                    }
+                  }}
+                  className="block mx-auto mt-3 text-sm text-blue-600 hover:text-blue-700"
+                >
+                  Continue to next category
+                </button>
+              </>
+            ) : (
+              "All caught up! No classified emails to review."
+            )}
           </div>
         ) : (
           emails.map((email) => {
