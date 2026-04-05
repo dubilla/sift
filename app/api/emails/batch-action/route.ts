@@ -6,8 +6,10 @@ import {
   userSettings,
   asanaSettings,
   asanaTasks,
+  todoistSettings,
   todoistTasks,
 } from "@/db/schema";
+import { batchArchiveEmails } from "@/lib/services/gmail";
 import { getValidAccessToken, getValidAccessTokenForProvider } from "@/lib/services/token";
 import { createTask as createAsanaTask, getCurrentUser } from "@/lib/services/asana";
 import { createTask as createTodoistTask } from "@/lib/services/todoist";
@@ -63,7 +65,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Fetch all referenced emails in one query
     const emailIds = Array.from(new Set(actions.map((a) => a.emailId)));
     const emailRows = await db
       .select()
@@ -79,10 +80,13 @@ export async function POST(request: Request) {
 
     const emailById = new Map(emailRows.map((e) => [e.id, e]));
 
-    // Get Gmail access token (needed for archive/unsubscribe)
-    const accessToken = await getValidAccessToken(session.user.id);
+    const needsGmailToken = actions.some(
+      (a) => a.action === "archive" || a.action === "unsubscribe"
+    );
+    const accessToken = needsGmailToken
+      ? await getValidAccessToken(session.user.id)
+      : null;
 
-    // Determine task manager settings upfront if any create_task actions
     const hasTaskActions = actions.some((a) => a.action === "create_task");
     let taskManager: "asana" | "todoist" = "asana";
     let taskAccessToken: string | null = null;
@@ -97,7 +101,7 @@ export async function POST(request: Request) {
         .where(eq(userSettings.userId, session.user.id))
         .limit(1);
 
-      taskManager = (settings?.taskManager === "todoist" ? "todoist" : "asana");
+      taskManager = settings?.taskManager === "todoist" ? "todoist" : "asana";
 
       try {
         taskAccessToken = await getValidAccessTokenForProvider(
@@ -132,8 +136,7 @@ export async function POST(request: Request) {
         }
       }
 
-      if (taskManager === "todoist") {
-        const { todoistSettings } = await import("@/db/schema");
+      if (taskManager === "todoist" && taskAccessToken) {
         const [todoistConfig] = await db
           .select()
           .from(todoistSettings)
@@ -146,10 +149,14 @@ export async function POST(request: Request) {
       }
     }
 
-    // Collect emails to bulk-archive via Gmail batchModify
     const archiveExternalIds: string[] = [];
-    const archiveInternalIds: string[] = [];
     const results: ActionResult[] = [];
+
+    // Collect unsubscribe work to run in parallel
+    const unsubscribeWork: {
+      email: (typeof emailRows)[0];
+      url: string;
+    }[] = [];
 
     for (const item of actions) {
       const email = emailById.get(item.emailId);
@@ -166,10 +173,8 @@ export async function POST(request: Request) {
 
       if (item.action === "archive") {
         archiveExternalIds.push(email.externalId);
-        archiveInternalIds.push(email.id);
         results.push({ emailId: email.id, action: "archive", success: true });
       } else if (item.action === "unsubscribe") {
-        // Unsubscribe requires individual HTTP calls
         if (!email.hasUnsubscribe || !email.unsubscribeUrl) {
           results.push({
             emailId: email.id,
@@ -177,10 +182,7 @@ export async function POST(request: Request) {
             success: false,
             error: "No unsubscribe URL available",
           });
-          continue;
-        }
-
-        if (email.unsubscribeUrl.startsWith("mailto:")) {
+        } else if (email.unsubscribeUrl.startsWith("mailto:")) {
           results.push({
             emailId: email.id,
             action: "unsubscribe",
@@ -188,36 +190,8 @@ export async function POST(request: Request) {
             requiresMailto: true,
             mailtoUrl: email.unsubscribeUrl,
           });
-          continue;
-        }
-
-        try {
-          const unsubResponse = await fetch(email.unsubscribeUrl, {
-            method: "GET",
-            redirect: "follow",
-          });
-
-          if (!unsubResponse.ok) {
-            results.push({
-              emailId: email.id,
-              action: "unsubscribe",
-              success: false,
-              error: `Unsubscribe request failed: ${unsubResponse.status}`,
-            });
-            continue;
-          }
-
-          // Also archive after unsubscribe
-          archiveExternalIds.push(email.externalId);
-          archiveInternalIds.push(email.id);
-          results.push({ emailId: email.id, action: "unsubscribe", success: true });
-        } catch (err) {
-          results.push({
-            emailId: email.id,
-            action: "unsubscribe",
-            success: false,
-            error: "Unsubscribe request failed",
-          });
+        } else {
+          unsubscribeWork.push({ email, url: email.unsubscribeUrl });
         }
       } else if (item.action === "create_task") {
         if (!taskAccessToken) {
@@ -277,7 +251,7 @@ export async function POST(request: Request) {
           }
 
           results.push({ emailId: email.id, action: "create_task", success: true });
-        } catch (err) {
+        } catch {
           results.push({
             emailId: email.id,
             action: "create_task",
@@ -288,42 +262,49 @@ export async function POST(request: Request) {
       }
     }
 
-    // Bulk archive via Gmail batchModify (up to 1000 at a time)
+    // Run unsubscribe requests in parallel
+    if (unsubscribeWork.length > 0) {
+      const unsubResults = await Promise.allSettled(
+        unsubscribeWork.map(async ({ email, url }) => {
+          const resp = await fetch(url, { method: "GET", redirect: "follow" });
+          return { email, ok: resp.ok, status: resp.status };
+        })
+      );
+
+      for (let i = 0; i < unsubResults.length; i++) {
+        const result = unsubResults[i];
+        const { email } = unsubscribeWork[i];
+
+        if (result.status === "fulfilled" && result.value.ok) {
+          archiveExternalIds.push(email.externalId);
+          results.push({ emailId: email.id, action: "unsubscribe", success: true });
+        } else {
+          const status = result.status === "fulfilled" ? result.value.status : 0;
+          results.push({
+            emailId: email.id,
+            action: "unsubscribe",
+            success: false,
+            error: `Unsubscribe request failed${status ? `: ${status}` : ""}`,
+          });
+        }
+      }
+    }
+
     if (archiveExternalIds.length > 0) {
-      const batchSize = 1000;
-      for (let i = 0; i < archiveExternalIds.length; i += batchSize) {
-        const batch = archiveExternalIds.slice(i, i + batchSize);
-
-        const response = await fetch(
-          "https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              ids: batch,
-              removeLabelIds: ["INBOX"],
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          // Mark archive results as failed
-          for (const result of results) {
-            if (
-              (result.action === "archive" || result.action === "unsubscribe") &&
-              result.success
-            ) {
-              result.success = false;
-              result.error = "Gmail batch archive failed";
-            }
+      try {
+        await batchArchiveEmails(accessToken!, archiveExternalIds);
+      } catch {
+        for (const result of results) {
+          if (
+            (result.action === "archive" || result.action === "unsubscribe") &&
+            result.success
+          ) {
+            result.success = false;
+            result.error = "Gmail batch archive failed";
           }
         }
       }
 
-      // Update database for successfully archived emails
       const successfulArchiveIds = results
         .filter((r) => (r.action === "archive" || r.action === "unsubscribe") && r.success)
         .map((r) => r.emailId);
@@ -336,7 +317,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Log all successful actions
     const activityEntries = results
       .filter((r) => r.success)
       .map((r) => ({

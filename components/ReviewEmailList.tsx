@@ -1,20 +1,18 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { formatEmailDate, parseFromHeader } from "@/lib/utils/email";
 import ApplySimilarModal from "./ApplySimilarModal";
 
 const PAGE_SIZE = 25;
 
-// Ordered from highest-volume/easiest to review -> lowest
 const TAG_REVIEW_ORDER = ["archivable", "unsubscribable", "asana_task", "quick_action"];
 
-// Map tag names to their default actions
 const TAG_ACTION_MAP: Record<string, "archive" | "unsubscribe" | "create_task" | null> = {
   archivable: "archive",
   unsubscribable: "unsubscribe",
   asana_task: "create_task",
-  quick_action: null, // Needs human response, no auto-action
+  quick_action: null,
 };
 
 interface EmailForReview {
@@ -359,11 +357,18 @@ export default function ReviewEmailList() {
     }
   };
 
+  const initializedRef = useRef(false);
+
+  // On mount: fetch tags, auto-select first tag, then fetch emails once
   useEffect(() => {
-    fetchTagsAndAutoSelect();
+    fetchTagsAndAutoSelect().then(() => {
+      initializedRef.current = true;
+    });
   }, []);
 
+  // After init: re-fetch when filter changes
   useEffect(() => {
+    if (!initializedRef.current) return;
     fetchEmails(1);
   }, [tagFilter, needsReview, fetchEmails]);
 
@@ -378,7 +383,6 @@ export default function ReviewEmailList() {
   // Count actionable emails on this page
   const includedEmails = emails.filter((e) => !excludedIds.has(e.id));
   const actionableCount = includedEmails.filter((e) => getAction(e) !== null).length;
-  const noActionCount = includedEmails.filter((e) => getAction(e) === null).length;
 
   // Group summary for the page header
   const tagSummary = emails.reduce<Record<string, number>>((acc, e) => {
@@ -575,7 +579,6 @@ export default function ReviewEmailList() {
         ) : (
           emails.map((email) => {
             const { name: senderName } = parseFromHeader(email.from);
-            const effectiveTagName = getEffectiveTag(email);
             const action = getAction(email);
             const isExcluded = excludedIds.has(email.id);
 
