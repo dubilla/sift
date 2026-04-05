@@ -40,15 +40,34 @@ jobs:
           fi
           echo "number=${PR_NUMBER}" >> $GITHUB_OUTPUT
 
-      - name: Get Neon branch connection string
-        if: steps.pr.outputs.number
+      - name: Get or create Neon preview branch
         id: neon
+        if: steps.pr.outputs.number
         run: |
           BRANCH_NAME="preview/pr-${{ steps.pr.outputs.number }}"
+
+          # Check if branch already exists
           BRANCH_ID=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
             "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches" \
             | jq -r --arg name "$BRANCH_NAME" '.branches[] | select(.name == $name) | .id')
+
+          # Create branch if it doesn't exist
+          if [ -z "$BRANCH_ID" ] || [ "$BRANCH_ID" = "null" ]; then
+            echo "Creating Neon branch ${BRANCH_NAME}..."
+            CREATE_RESPONSE=$(curl -s -X POST \
+              -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches" \
+              -d "{\"branch\": {\"name\": \"${BRANCH_NAME}\"}}")
+            BRANCH_ID=$(echo "$CREATE_RESPONSE" | jq -r '.branch.id')
+            if [ -z "$BRANCH_ID" ] || [ "$BRANCH_ID" = "null" ]; then
+              echo "Failed to create Neon branch: $CREATE_RESPONSE"
+              exit 1
+            fi
+            echo "Created branch ${BRANCH_NAME} with ID ${BRANCH_ID}"
+          fi
+
           POSTGRES_URL=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
             "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/connection_uri?branch_id=${BRANCH_ID}&pooled=true" \
