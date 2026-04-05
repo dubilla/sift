@@ -260,6 +260,36 @@ export async function getFullEmail(accessToken: string, emailId: string) {
   }
 }
 
+/**
+ * Archive multiple emails via Gmail batchModify API.
+ * Splits into chunks of 1000 (Gmail's limit).
+ */
+export async function batchArchiveEmails(accessToken: string, gmailIds: string[]) {
+  const batchSize = 1000;
+  for (let i = 0; i < gmailIds.length; i += batchSize) {
+    const batch = gmailIds.slice(i, i + batchSize);
+
+    const response = await fetch(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ids: batch,
+          removeLabelIds: ["INBOX"],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to archive emails via Gmail API");
+    }
+  }
+}
+
 export async function archiveEmail(accessToken: string, emailId: string) {
   try {
     const gmail = await getGmailClient(accessToken);

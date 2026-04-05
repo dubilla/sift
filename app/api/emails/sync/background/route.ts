@@ -69,16 +69,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Auto-classify newly synced emails
+    // Auto-classify newly synced emails (parallel, errors don't block sync)
     let classifiedCount = 0;
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     if (OPENAI_API_KEY && emailRecords.length > 0) {
       const allTags = await db.select().from(tags);
       const tagsByName = new Map(allTags.map((t) => [t.name, t]));
 
-      for (const record of emailRecords) {
-        try {
-          const classification = await classifyEmail(
+      const classifyResults = await Promise.allSettled(
+        emailRecords.map((record) =>
+          classifyEmail(
             {
               id: record.id,
               subject: record.subject || null,
@@ -92,26 +92,29 @@ export async function POST(request: Request) {
             },
             OPENAI_API_KEY,
             session.user.id
-          );
+          ).then((classification) => ({ record, classification }))
+        )
+      );
 
-          if (classification.tag && classification.confidence >= CONFIDENCE_THRESHOLD) {
-            const tag = tagsByName.get(classification.tag);
-            if (tag) {
-              await db
-                .insert(emailTags)
-                .values({
-                  id: crypto.randomUUID(),
-                  emailId: record.id,
-                  tagId: tag.id,
-                  source: classification.source,
-                  confidence: classification.confidence,
-                })
-                .onConflictDoNothing();
-              classifiedCount++;
-            }
+      for (const result of classifyResults) {
+        if (result.status !== "fulfilled") continue;
+        const { record, classification } = result.value;
+
+        if (classification.tag && classification.confidence >= CONFIDENCE_THRESHOLD) {
+          const tag = tagsByName.get(classification.tag);
+          if (tag) {
+            await db
+              .insert(emailTags)
+              .values({
+                id: crypto.randomUUID(),
+                emailId: record.id,
+                tagId: tag.id,
+                source: classification.source,
+                confidence: classification.confidence,
+              })
+              .onConflictDoNothing();
+            classifiedCount++;
           }
-        } catch {
-          // Skip classification errors - email is still synced
         }
       }
     }
