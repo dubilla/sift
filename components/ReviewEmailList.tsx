@@ -4,6 +4,16 @@ import { useEffect, useState, useCallback } from "react";
 import { formatEmailDate, parseFromHeader } from "@/lib/utils/email";
 import ApplySimilarModal from "./ApplySimilarModal";
 
+const PAGE_SIZE = 25;
+
+// Map tag names to their default actions
+const TAG_ACTION_MAP: Record<string, "archive" | "unsubscribe" | "create_task" | null> = {
+  archivable: "archive",
+  unsubscribable: "unsubscribe",
+  asana_task: "create_task",
+  quick_action: null, // Needs human response, no auto-action
+};
+
 interface EmailForReview {
   id: string;
   subject: string;
@@ -28,17 +38,28 @@ interface Tag {
   icon: string | null;
 }
 
+// Track per-email overrides: if the user changes a tag, we store the new tag here
+type TagOverrides = Record<string, { tagId: string; tagName: string }>;
+
 export default function ReviewEmailList() {
   const [emails, setEmails] = useState<EmailForReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [needsReview, setNeedsReview] = useState(false);
   const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [tagOverrides, setTagOverrides] = useState<TagOverrides>({});
   const [updatingEmailId, setUpdatingEmailId] = useState<string | null>(null);
+  const [executing, setExecuting] = useState(false);
+  const [executionResult, setExecutionResult] = useState<{
+    succeeded: number;
+    failed: number;
+  } | null>(null);
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
+
+  // Apply Similar modal state
   const [similarModalOpen, setSimilarModalOpen] = useState(false);
   const [similarEmails, setSimilarEmails] = useState<any[]>([]);
   const [pendingCorrection, setPendingCorrection] = useState<{
@@ -49,7 +70,6 @@ export default function ReviewEmailList() {
     newTagIcon: string | null;
   } | null>(null);
 
-  // Fetch all available tags
   const fetchTags = async () => {
     try {
       const response = await fetch("/api/emails/classify");
@@ -62,50 +82,60 @@ export default function ReviewEmailList() {
     }
   };
 
-  const fetchEmails = useCallback(async (
-    pageNum: number = 1,
-    append: boolean = false
-  ) => {
-    if (append) {
-      setLoadingMore(true);
-    } else {
+  const fetchEmails = useCallback(
+    async (pageNum: number = 1) => {
       setLoading(true);
-    }
+      setTagOverrides({});
+      setExcludedIds(new Set());
+      setExecutionResult(null);
 
-    try {
-      const params = new URLSearchParams({
-        page: pageNum.toString(),
-        limit: "50",
-      });
+      try {
+        const params = new URLSearchParams({
+          page: pageNum.toString(),
+          limit: PAGE_SIZE.toString(),
+        });
 
-      if (tagFilter) {
-        params.append("tag", tagFilter);
+        if (tagFilter) {
+          params.append("tag", tagFilter);
+        }
+
+        if (needsReview) {
+          params.append("needsReview", "true");
+        }
+
+        const response = await fetch(
+          `/api/classifications/review?${params.toString()}`
+        );
+        const data = await response.json();
+
+        if (data.emails) {
+          setEmails(data.emails);
+          setHasMore(data.hasMore);
+          setPage(pageNum);
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to fetch emails"
+        );
+        setTimeout(() => setError(null), 5000);
+      } finally {
+        setLoading(false);
       }
+    },
+    [tagFilter, needsReview]
+  );
 
-      if (needsReview) {
-        params.append("needsReview", "true");
-      }
-
-      const response = await fetch(
-        `/api/classifications/review?${params.toString()}`
-      );
-      const data = await response.json();
-
-      if (data.emails) {
-        setEmails((prev) => (append ? [...prev, ...data.emails] : data.emails));
-        setHasMore(data.hasMore);
-        setPage(pageNum);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch emails");
-      setTimeout(() => setError(null), 5000);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [tagFilter, needsReview]);
-
+  // Correct a single email's tag (persists to backend + triggers similar modal)
   const handleCorrectTag = async (emailId: string, newTagId: string) => {
+    const newTag = allTags.find((t) => t.id === newTagId);
+    if (!newTag) return;
+
+    // Update local override immediately for responsiveness
+    setTagOverrides((prev) => ({
+      ...prev,
+      [emailId]: { tagId: newTagId, tagName: newTag.name },
+    }));
+
     setUpdatingEmailId(emailId);
 
     try {
@@ -124,26 +154,46 @@ export default function ReviewEmailList() {
 
       const data = await response.json();
 
-      // If similar emails were found, show the modal
-      if (data.similarEmails && data.similarEmails.length > 0) {
-        const newTag = allTags.find(t => t.id === newTagId);
-        if (newTag) {
-          setPendingCorrection({
-            emailId,
-            newTagId,
-            newTagName: newTag.name,
-            newTagDisplayName: newTag.displayName,
-            newTagIcon: newTag.icon,
-          });
-          setSimilarEmails(data.similarEmails);
-          setSimilarModalOpen(true);
-        }
-      }
+      // Update the email's tag in local state
+      setEmails((prev) =>
+        prev.map((e) =>
+          e.id === emailId
+            ? {
+                ...e,
+                currentTag: {
+                  id: newTagId,
+                  name: newTag.name,
+                  displayName: newTag.displayName || newTag.name,
+                  icon: newTag.icon,
+                  color: null,
+                },
+                confidence: 1.0,
+                source: "user",
+              }
+            : e
+        )
+      );
 
-      // Refresh the email list
-      await fetchEmails(1, false);
+      // If similar emails found, show modal
+      if (data.similarEmails && data.similarEmails.length > 0) {
+        setPendingCorrection({
+          emailId,
+          newTagId,
+          newTagName: newTag.name,
+          newTagDisplayName: newTag.displayName || newTag.name,
+          newTagIcon: newTag.icon,
+        });
+        setSimilarEmails(data.similarEmails);
+        setSimilarModalOpen(true);
+      }
     } catch (err) {
       console.error("Error correcting tag:", err);
+      // Revert override
+      setTagOverrides((prev) => {
+        const next = { ...prev };
+        delete next[emailId];
+        return next;
+      });
       setError("Failed to update classification");
       setTimeout(() => setError(null), 5000);
     } finally {
@@ -155,7 +205,7 @@ export default function ReviewEmailList() {
     if (!pendingCorrection) return;
 
     try {
-      const response = await fetch(
+      await fetch(
         `/api/emails/${pendingCorrection.emailId}/correct-classification`,
         {
           method: "POST",
@@ -166,13 +216,6 @@ export default function ReviewEmailList() {
           }),
         }
       );
-
-      if (!response.ok) {
-        throw new Error("Failed to apply to similar emails");
-      }
-
-      // Refresh the email list
-      await fetchEmails(1, false);
     } catch (err) {
       console.error("Error applying to similar emails:", err);
       setError("Failed to apply to similar emails");
@@ -180,19 +223,89 @@ export default function ReviewEmailList() {
     }
   };
 
-  const handleFilterChange = (newTagFilter: string | null) => {
-    setTagFilter(newTagFilter);
-    setPage(1);
+  // Toggle excluding an email from the page action
+  const handleToggleExclude = (emailId: string) => {
+    setExcludedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(emailId)) {
+        next.delete(emailId);
+      } else {
+        next.add(emailId);
+      }
+      return next;
+    });
   };
 
-  const handleNeedsReviewToggle = () => {
-    setNeedsReview((prev) => !prev);
-    setPage(1);
+  // Get the effective tag for an email (override or current)
+  const getEffectiveTag = (email: EmailForReview) => {
+    const override = tagOverrides[email.id];
+    if (override) return override.tagName;
+    return email.currentTag.name;
   };
 
-  const loadMore = async () => {
-    if (!hasMore || loadingMore) return;
-    await fetchEmails(page + 1, true);
+  // Get the action for an email based on its effective tag
+  const getAction = (email: EmailForReview) => {
+    const tagName = getEffectiveTag(email);
+    return TAG_ACTION_MAP[tagName] || null;
+  };
+
+  // Execute all actions for the current page
+  const handleApprovePage = async () => {
+    setExecuting(true);
+    setExecutionResult(null);
+
+    try {
+      const actions = emails
+        .filter((e) => !excludedIds.has(e.id))
+        .map((e) => ({
+          emailId: e.id,
+          action: getAction(e),
+        }))
+        .filter((a) => a.action !== null) as {
+        emailId: string;
+        action: "archive" | "unsubscribe" | "create_task";
+      }[];
+
+      if (actions.length === 0) {
+        setExecutionResult({ succeeded: 0, failed: 0 });
+        setExecuting(false);
+        return;
+      }
+
+      const response = await fetch("/api/emails/batch-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actions }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Batch action failed");
+      }
+
+      const data = await response.json();
+      setExecutionResult({
+        succeeded: data.summary.succeeded,
+        failed: data.summary.failed,
+      });
+
+      // After a short delay, load the next page
+      setTimeout(() => {
+        fetchEmails(page);
+      }, 1500);
+    } catch (err) {
+      console.error("Error executing batch actions:", err);
+      setError("Failed to execute actions");
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  // Skip page without executing any actions
+  const handleSkipPage = () => {
+    if (hasMore) {
+      fetchEmails(page + 1);
+    }
   };
 
   useEffect(() => {
@@ -200,7 +313,7 @@ export default function ReviewEmailList() {
   }, []);
 
   useEffect(() => {
-    fetchEmails(1, false);
+    fetchEmails(1);
   }, [tagFilter, needsReview, fetchEmails]);
 
   if (loading) {
@@ -210,6 +323,19 @@ export default function ReviewEmailList() {
       </div>
     );
   }
+
+  // Count actionable emails on this page
+  const includedEmails = emails.filter((e) => !excludedIds.has(e.id));
+  const actionableCount = includedEmails.filter((e) => getAction(e) !== null).length;
+  const noActionCount = includedEmails.filter((e) => getAction(e) === null).length;
+
+  // Group summary for the page header
+  const tagSummary = emails.reduce<Record<string, number>>((acc, e) => {
+    if (excludedIds.has(e.id)) return acc;
+    const tagName = getEffectiveTag(e);
+    acc[tagName] = (acc[tagName] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <div>
@@ -222,9 +348,10 @@ export default function ReviewEmailList() {
             </label>
             <select
               value={tagFilter || ""}
-              onChange={(e) =>
-                handleFilterChange(e.target.value || null)
-              }
+              onChange={(e) => {
+                setTagFilter(e.target.value || null);
+                setPage(1);
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Tags</option>
@@ -241,7 +368,10 @@ export default function ReviewEmailList() {
               <input
                 type="checkbox"
                 checked={needsReview}
-                onChange={handleNeedsReviewToggle}
+                onChange={() => {
+                  setNeedsReview((prev) => !prev);
+                  setPage(1);
+                }}
                 className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
               />
               <span className="text-sm font-medium text-gray-700">
@@ -251,6 +381,89 @@ export default function ReviewEmailList() {
           </div>
         </div>
       </div>
+
+      {/* Page action summary */}
+      {emails.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-blue-900">
+                Page {page} &mdash; {emails.length} email{emails.length !== 1 ? "s" : ""}
+              </h3>
+              <div className="flex flex-wrap gap-3 mt-1">
+                {Object.entries(tagSummary).map(([tagName, count]) => {
+                  const tag = allTags.find((t) => t.name === tagName);
+                  const action = TAG_ACTION_MAP[tagName];
+                  return (
+                    <span
+                      key={tagName}
+                      className="text-xs text-blue-800"
+                    >
+                      {tag?.icon} {tag?.displayName || tagName}: {count}
+                      {action && (
+                        <span className="text-blue-600 ml-1">
+                          ({action.replace("_", " ")})
+                        </span>
+                      )}
+                      {!action && (
+                        <span className="text-gray-500 ml-1">(no action)</span>
+                      )}
+                    </span>
+                  );
+                })}
+                {excludedIds.size > 0 && (
+                  <span className="text-xs text-gray-500">
+                    {excludedIds.size} excluded
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSkipPage}
+                disabled={executing || !hasMore}
+                className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Skip Page
+              </button>
+              <button
+                onClick={handleApprovePage}
+                disabled={executing || actionableCount === 0}
+                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {executing
+                  ? "Executing..."
+                  : `Approve Page (${actionableCount} action${actionableCount !== 1 ? "s" : ""})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Execution result banner */}
+      {executionResult && (
+        <div
+          className={`rounded-lg p-4 mb-4 ${
+            executionResult.failed === 0
+              ? "bg-green-50 border border-green-200"
+              : "bg-yellow-50 border border-yellow-200"
+          }`}
+        >
+          <p
+            className={`text-sm ${
+              executionResult.failed === 0
+                ? "text-green-800"
+                : "text-yellow-800"
+            }`}
+          >
+            {executionResult.succeeded} action{executionResult.succeeded !== 1 ? "s" : ""}{" "}
+            completed successfully.
+            {executionResult.failed > 0 &&
+              ` ${executionResult.failed} failed.`}
+            {" "}Loading next page...
+          </p>
+        </div>
+      )}
 
       {/* Error message */}
       {error && (
@@ -268,10 +481,29 @@ export default function ReviewEmailList() {
         ) : (
           emails.map((email) => {
             const { name: senderName } = parseFromHeader(email.from);
+            const effectiveTagName = getEffectiveTag(email);
+            const action = getAction(email);
+            const isExcluded = excludedIds.has(email.id);
 
             return (
-              <div key={email.id} className="p-4 hover:bg-gray-50">
-                <div className="flex items-start gap-4">
+              <div
+                key={email.id}
+                className={`p-4 transition-colors ${
+                  isExcluded
+                    ? "bg-gray-50 opacity-60"
+                    : "hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  {/* Include/exclude checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={!isExcluded}
+                    onChange={() => handleToggleExclude(email.id)}
+                    className="w-4 h-4 mt-1 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    title={isExcluded ? "Include in page action" : "Exclude from page action"}
+                  />
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <h3 className="text-sm font-semibold text-gray-900 truncate">
@@ -291,11 +523,14 @@ export default function ReviewEmailList() {
                     </p>
 
                     <div className="flex items-center gap-4 mt-2">
-                      {/* Current tag dropdown */}
+                      {/* Tag dropdown */}
                       <div className="flex items-center gap-2">
                         <label className="text-xs text-gray-500">Tag:</label>
                         <select
-                          value={email.currentTag.id}
+                          value={
+                            tagOverrides[email.id]?.tagId ||
+                            email.currentTag.id
+                          }
                           onChange={(e) =>
                             handleCorrectTag(email.id, e.target.value)
                           }
@@ -314,19 +549,34 @@ export default function ReviewEmailList() {
                         </select>
                       </div>
 
+                      {/* Action indicator */}
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full ${
+                          action === "archive"
+                            ? "bg-gray-100 text-gray-700"
+                            : action === "unsubscribe"
+                            ? "bg-red-100 text-red-700"
+                            : action === "create_task"
+                            ? "bg-purple-100 text-purple-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        {action
+                          ? action.replace("_", " ")
+                          : "no action"}
+                      </span>
+
                       {/* Confidence and source */}
                       <div className="flex items-center gap-2 text-xs text-gray-500">
                         {email.confidence !== null && (
                           <span>
-                            Confidence:{" "}
                             {Math.round((email.confidence || 0) * 100)}%
                           </span>
                         )}
                         <span className="text-gray-300">|</span>
-                        <span>Source: {email.source}</span>
+                        <span>{email.source}</span>
                       </div>
 
-                      {/* Update indicator */}
                       {updatingEmailId === email.id && (
                         <span className="text-xs text-blue-600">
                           Updating...
@@ -341,15 +591,23 @@ export default function ReviewEmailList() {
         )}
       </div>
 
-      {/* Load more button */}
-      {hasMore && (
-        <div className="mt-4 flex justify-center">
+      {/* Page navigation */}
+      {emails.length > 0 && (
+        <div className="mt-4 flex items-center justify-between">
           <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="px-6 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            onClick={() => fetchEmails(Math.max(1, page - 1))}
+            disabled={page === 1}
+            className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {loadingMore ? "Loading..." : "Load More"}
+            Previous
+          </button>
+          <span className="text-sm text-gray-600">Page {page}</span>
+          <button
+            onClick={() => fetchEmails(page + 1)}
+            disabled={!hasMore}
+            className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Next
           </button>
         </div>
       )}
