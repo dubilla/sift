@@ -52,57 +52,8 @@ export async function POST(
       return NextResponse.json({ error: "Tag not found" }, { status: 404 });
     }
 
-    // Get current classification (if any)
-    const currentClassifications = await db
-      .select({
-        tagId: emailTags.tagId,
-        source: emailTags.source,
-        confidence: emailTags.confidence,
-      })
-      .from(emailTags)
-      .where(eq(emailTags.emailId, emailId));
-
-    const currentClassification = currentClassifications[0] || null;
-
-    // Delete old classification(s) if they exist
-    if (currentClassifications.length > 0) {
-      await db.delete(emailTags).where(eq(emailTags.emailId, emailId));
-    }
-
-    // Insert new classification with source='user' and confidence=1.0
-    await db.insert(emailTags).values({
-      id: crypto.randomUUID(),
-      emailId: emailId,
-      tagId: newTagId,
-      source: "user",
-      confidence: 1.0,
-    });
-
-    // Store correction context (email metadata snapshot)
-    const correctionContext = {
-      from: email.from,
-      subject: email.subject,
-      snippet: email.snippet,
-      listId: email.listId,
-      isNoreply: email.isNoreply,
-      recipientCount: email.recipientCount,
-      hasUnsubscribe: email.hasUnsubscribe,
-    };
-
-    // Insert correction record
-    await db.insert(classificationCorrections).values({
-      id: crypto.randomUUID(),
-      userId: session.user.id,
-      emailId: emailId,
-      oldTagId: currentClassification?.tagId || null,
-      newTagId: newTagId,
-      oldSource: currentClassification?.source || null,
-      oldConfidence: currentClassification?.confidence || null,
-      appliedToSimilar: false,
-      correctionContext: correctionContext,
-    });
-
-    // If applying to similar emails, do that now
+    // If applying to similar emails, the original was already corrected in the first call.
+    // Skip re-correcting it and just handle the similar emails.
     if (applyToSimilarIds && Array.isArray(applyToSimilarIds) && applyToSimilarIds.length > 0) {
       // Verify all IDs belong to the user
       const similarEmails = await db
@@ -173,6 +124,57 @@ export async function POST(
         appliedCount: idsToUpdate.length,
       });
     }
+
+    // Correct the original email's classification
+    // Get current classification (if any)
+    const currentClassifications = await db
+      .select({
+        tagId: emailTags.tagId,
+        source: emailTags.source,
+        confidence: emailTags.confidence,
+      })
+      .from(emailTags)
+      .where(eq(emailTags.emailId, emailId));
+
+    const currentClassification = currentClassifications[0] || null;
+
+    // Delete old classification(s) if they exist
+    if (currentClassifications.length > 0) {
+      await db.delete(emailTags).where(eq(emailTags.emailId, emailId));
+    }
+
+    // Insert new classification with source='user' and confidence=1.0
+    await db.insert(emailTags).values({
+      id: crypto.randomUUID(),
+      emailId: emailId,
+      tagId: newTagId,
+      source: "user",
+      confidence: 1.0,
+    });
+
+    // Store correction context (email metadata snapshot)
+    const correctionContext = {
+      from: email.from,
+      subject: email.subject,
+      snippet: email.snippet,
+      listId: email.listId,
+      isNoreply: email.isNoreply,
+      recipientCount: email.recipientCount,
+      hasUnsubscribe: email.hasUnsubscribe,
+    };
+
+    // Insert correction record
+    await db.insert(classificationCorrections).values({
+      id: crypto.randomUUID(),
+      userId: session.user.id,
+      emailId: emailId,
+      oldTagId: currentClassification?.tagId || null,
+      newTagId: newTagId,
+      oldSource: currentClassification?.source || null,
+      oldConfidence: currentClassification?.confidence || null,
+      appliedToSimilar: false,
+      correctionContext: correctionContext,
+    });
 
     // Find similar emails to suggest for bulk correction
     const senderEmail = extractEmailAddress(email.from);
