@@ -19,8 +19,26 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = (page - 1) * limit;
 
+    // Build conditions
+    const conditions = [
+      eq(emails.userId, session.user.id),
+      isNull(emails.archivedAt),
+      isNull(emails.deletedAt),
+    ];
+
+    // Apply tag filter if specified
+    if (tagFilter) {
+      conditions.push(eq(tags.name, tagFilter));
+    }
+
+    // Apply confidence filter if "needs review" is selected
+    if (needsReview) {
+      conditions.push(gte(emailTags.confidence, 0.7));
+      conditions.push(lte(emailTags.confidence, 0.8));
+    }
+
     // Build query to fetch classified emails
-    let query = db
+    const query = db
       .select({
         id: emails.id,
         subject: emails.subject,
@@ -38,29 +56,7 @@ export async function GET(request: Request) {
       .from(emails)
       .innerJoin(emailTags, eq(emails.id, emailTags.emailId))
       .innerJoin(tags, eq(emailTags.tagId, tags.id))
-      .where(
-        and(
-          eq(emails.userId, session.user.id),
-          isNull(emails.archivedAt),
-          isNull(emails.deletedAt)
-        )
-      )
-      .$dynamic();
-
-    // Apply tag filter if specified
-    if (tagFilter) {
-      query = query.where(eq(tags.name, tagFilter));
-    }
-
-    // Apply confidence filter if "needs review" is selected
-    if (needsReview) {
-      query = query.where(
-        and(
-          gte(emailTags.confidence, 0.7),
-          lte(emailTags.confidence, 0.8)
-        )
-      );
-    }
+      .where(and(...conditions));
 
     // Order by date descending and apply pagination
     const results = await query
