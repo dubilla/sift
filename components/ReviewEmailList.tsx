@@ -203,6 +203,14 @@ export default function ReviewEmailList() {
     fetchEmails(1, false);
   }, [tagFilter, needsReview, fetchEmails]);
 
+  useEffect(() => {
+    const handleEmailArchived = () => {
+      fetchEmails(1, false);
+    };
+    window.addEventListener("emailArchived", handleEmailArchived);
+    return () => window.removeEventListener("emailArchived", handleEmailArchived);
+  }, [fetchEmails]);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
