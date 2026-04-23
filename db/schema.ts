@@ -161,7 +161,7 @@ export const userSettings = pgTable("user_settings", {
   userId: text("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
-  taskManager: varchar("task_manager", { length: 20 }).default("asana").notNull(), // 'asana' | 'todoist'
+  taskManager: varchar("task_manager", { length: 20 }).default("asana").notNull(), // 'asana' | 'todoist' | 'crew'
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -187,6 +187,31 @@ export const todoistTasks = pgTable("todoist_tasks", {
   emailId: text("email_id").references(() => emails.id),
   todoistTaskId: text("todoist_task_id").notNull(),
   todoistTaskUrl: text("todoist_task_url"),
+  taskName: text("task_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Crew integration tables
+export const crewSettings = pgTable("crew_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  baseUrl: text("base_url").notNull(),
+  apiToken: text("api_token").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const crewTasks = pgTable("crew_tasks", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  emailId: text("email_id").references(() => emails.id),
+  crewTaskId: text("crew_task_id").notNull(),
+  crewTaskUrl: text("crew_task_url"),
   taskName: text("task_name").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

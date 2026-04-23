@@ -78,6 +78,13 @@
       "when": 1774406336934,
       "tag": "0010_youthful_spacker_dave",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1776905523726,
+      "tag": "0011_silent_lady_vermin",
+      "breakpoints": true
     }
   ]
 }
