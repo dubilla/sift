@@ -49,9 +49,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { taskManager } = body;
 
-    if (!taskManager || !["asana", "todoist"].includes(taskManager)) {
+    if (!taskManager || !["asana", "todoist", "crew"].includes(taskManager)) {
       return NextResponse.json(
-        { error: "Invalid task manager. Must be 'asana' or 'todoist'" },
+        { error: "Invalid task manager. Must be 'asana', 'todoist', or 'crew'" },
         { status: 400 }
       );
     }

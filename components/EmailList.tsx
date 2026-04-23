@@ -8,6 +8,7 @@ import { SyncProgress } from "./SyncProgress";
 import FilterModal from "./FilterModal";
 import CreateAsanaTaskModal from "./CreateAsanaTaskModal";
 import CreateTodoistTaskModal from "./CreateTodoistTaskModal";
+import CreateCrewTaskModal from "./CreateCrewTaskModal";
 
 interface Thread {
   threadId: string;
@@ -85,6 +86,7 @@ export default function EmailList() {
   const [openMenuThreadId, setOpenMenuThreadId] = useState<string | null>(null);
   const [taskManager, setTaskManager] = useState<string>("asana");
   const [todoistModalOpen, setTodoistModalOpen] = useState(false);
+  const [crewModalOpen, setCrewModalOpen] = useState(false);
 
   const { syncState, startSync } = useBackgroundSync();
 
@@ -302,6 +304,8 @@ export default function EmailList() {
     });
     if (taskManager === "todoist") {
       setTodoistModalOpen(true);
+    } else if (taskManager === "crew") {
+      setCrewModalOpen(true);
     } else {
       setAsanaModalOpen(true);
     }
@@ -959,6 +963,10 @@ export default function EmailList() {
                                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                                   <path d="M21 3H3v18h18V3zm-2.5 7.5l-5.25 3-5.25-3V8l5.25 3 5.25-3v2.5z" />
                                 </svg>
+                              ) : taskManager === "crew" ? (
+                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                </svg>
                               ) : (
                                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3.75a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm-4.58 7.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm9.16 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5z" />
@@ -1058,6 +1066,10 @@ export default function EmailList() {
                       {taskManager === "todoist" ? (
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M21 3H3v18h18V3zm-2.5 7.5l-5.25 3-5.25-3V8l5.25 3 5.25-3v2.5z" />
+                        </svg>
+                      ) : taskManager === "crew" ? (
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                         </svg>
                       ) : (
                         <svg
@@ -1186,6 +1198,14 @@ export default function EmailList() {
       <CreateTodoistTaskModal
         isOpen={todoistModalOpen}
         onClose={() => setTodoistModalOpen(false)}
+        emailSubject={selectedEmailForTask?.subject || ""}
+        emailFrom={selectedEmailForTask?.from || ""}
+        emailSnippet={selectedEmailForTask?.snippet || ""}
+        emailId={selectedEmailForTask?.id || ""}
+      />
+      <CreateCrewTaskModal
+        isOpen={crewModalOpen}
+        onClose={() => setCrewModalOpen(false)}
         emailSubject={selectedEmailForTask?.subject || ""}
         emailFrom={selectedEmailForTask?.from || ""}
         emailSnippet={selectedEmailForTask?.snippet || ""}
