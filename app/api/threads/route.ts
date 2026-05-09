@@ -179,7 +179,7 @@ export async function GET(request: Request) {
           AND et.confidence >= 0.7
           LIMIT 1
         )`,
-        date: sql<Date>`MAX(${emails.date})`,
+        date: sql<string>`to_char(MAX(${emails.date}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
         messageCount: sql<number>`COUNT(*)`,
       })
       .from(emails)
