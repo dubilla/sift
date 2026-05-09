@@ -4,6 +4,8 @@ import { emails } from "@/db/schema";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
+import { classifyEmailsBatch } from "@/lib/services/classify-batch";
+import { waitUntil } from "@vercel/functions";
 
 export async function POST(request: Request) {
   try {
@@ -42,11 +44,22 @@ export async function POST(request: Request) {
       recipientCount: email.recipientCount,
     }));
 
+    let insertedIds: string[] = [];
     if (emailRecords.length > 0) {
-      await db
+      const inserted = await db
         .insert(emails)
         .values(emailRecords)
-        .onConflictDoNothing({ target: emails.externalId });
+        .onConflictDoNothing({ target: emails.externalId })
+        .returning({ id: emails.id });
+      insertedIds = inserted.map((r) => r.id);
+    }
+
+    if (insertedIds.length > 0) {
+      waitUntil(
+        classifyEmailsBatch(session.user.id, insertedIds).catch((err) => {
+          console.error("Background classification failed:", err);
+        })
+      );
     }
 
     return NextResponse.json({
