@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { emails, emailTags, tags } from "@/db/schema";
-import { and, eq, isNull, desc, sql, notExists, inArray } from "drizzle-orm";
+import { and, eq, isNull, desc, sql, notExists, inArray, max, count } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -179,8 +179,8 @@ export async function GET(request: Request) {
           AND et.confidence >= 0.7
           LIMIT 1
         )`,
-        date: sql<Date>`MAX(${emails.date})`,
-        messageCount: sql<number>`COUNT(*)`,
+        date: max(emails.date),
+        messageCount: count(),
       })
       .from(emails)
       .where(
@@ -201,7 +201,7 @@ export async function GET(request: Request) {
           : whereCondition
       )
       .groupBy(emails.threadId, emails.userId)
-      .orderBy(desc(sql`MAX(${emails.date})`))
+      .orderBy(desc(max(emails.date)))
       .limit(limit)
       .offset(offset);
 

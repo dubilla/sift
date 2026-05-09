@@ -41,6 +41,8 @@ vi.mock("drizzle-orm", () => ({
   desc: vi.fn((col) => ({ type: "desc", col })),
   inArray: vi.fn((col, vals) => ({ type: "inArray", col, vals })),
   notExists: vi.fn((subq) => ({ type: "notExists", subq })),
+  max: vi.fn((col) => ({ type: "max", col })),
+  count: vi.fn(() => ({ type: "count" })),
   sql: vi.fn((strings, ...values) => ({
     type: "sql",
     strings,
