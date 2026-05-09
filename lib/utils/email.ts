@@ -1,10 +1,10 @@
-export function formatEmailDate(dateString: string): string {
+export function formatEmailDate(dateString: string, timezone?: string | null): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
 
-  // Use the browser's timezone automatically
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Prefer explicit user timezone; fall back to browser/runtime detection
+  const timeZone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   if (diffInHours < 24) {
     return date.toLocaleTimeString("en-US", {

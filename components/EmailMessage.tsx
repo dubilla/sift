@@ -1,6 +1,7 @@
 "use client";
 
 import { formatEmailDate, parseFromHeader } from "@/lib/utils/email";
+import { useUserTimezone } from "@/lib/hooks/useUserTimezone";
 import DOMPurify from "dompurify";
 
 interface EmailMessageProps {
@@ -31,6 +32,7 @@ export default function EmailMessage({
   archivedAt,
 }: EmailMessageProps) {
   const sender = parseFromHeader(from);
+  const timezone = useUserTimezone();
 
   const sanitizeHtml = (html: string) => {
     if (typeof window === "undefined") return "";
@@ -66,7 +68,7 @@ export default function EmailMessage({
             <span className="text-xs text-gray-500">{sender.email}</span>
           </div>
           <div className="text-xs text-gray-500">
-            To: {to} • {formatEmailDate(date)}
+            To: {to} • {formatEmailDate(date, timezone)}
           </div>
         </div>
         {showArchiveButton && onArchive && (

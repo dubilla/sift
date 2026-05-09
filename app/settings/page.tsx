@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import TaskManagerPreference from "@/components/TaskManagerPreference";
+import TimezonePreference from "@/components/TimezonePreference";
 import AsanaSettings from "@/components/AsanaSettings";
 import TodoistSettings from "@/components/TodoistSettings";
 import CrewSettings from "@/components/CrewSettings";
@@ -46,6 +47,7 @@ export default async function SettingsPage() {
 
         <div className="space-y-6">
           <TaskManagerPreference />
+          <TimezonePreference />
           <AsanaSettings />
           <TodoistSettings />
           <CrewSettings />
