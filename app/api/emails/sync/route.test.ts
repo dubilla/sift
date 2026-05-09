@@ -31,6 +31,14 @@ vi.mock("@/lib/services/token", () => ({
   getValidAccessToken: vi.fn(),
 }));
 
+vi.mock("@/lib/services/classify-batch", () => ({
+  classifyEmailsBatch: vi.fn().mockResolvedValue({ classified: 0, total: 0 }),
+}));
+
+vi.mock("@vercel/functions", () => ({
+  waitUntil: vi.fn(),
+}));
+
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((col, val) => ({ type: "eq", col, val })),
   and: vi.fn((...args) => ({ type: "and", args })),
@@ -109,8 +117,9 @@ describe("POST /api/emails/sync", () => {
     vi.mocked(getValidAccessToken).mockResolvedValue("mock-access-token");
     vi.mocked(getUnarchivedEmails).mockResolvedValue(mockGmailResponse);
 
+    const mockReturning = vi.fn().mockResolvedValue([]);
     const mockOnConflictDoUpdate = vi.fn().mockResolvedValue(undefined);
-    const mockOnConflictDoNothing = vi.fn().mockResolvedValue(undefined);
+    const mockOnConflictDoNothing = vi.fn(() => ({ returning: mockReturning }));
     const mockValues = vi.fn(() => ({
       onConflictDoNothing: mockOnConflictDoNothing,
       onConflictDoUpdate: mockOnConflictDoUpdate,
@@ -189,8 +198,9 @@ describe("POST /api/emails/sync", () => {
     vi.mocked(getValidAccessToken).mockResolvedValue("token");
     vi.mocked(getUnarchivedEmails).mockResolvedValue(mockGmailResponse);
 
+    const mockReturning = vi.fn().mockResolvedValue([]);
     const mockOnConflictDoUpdate = vi.fn().mockResolvedValue(undefined);
-    const mockOnConflictDoNothing = vi.fn().mockResolvedValue(undefined);
+    const mockOnConflictDoNothing = vi.fn(() => ({ returning: mockReturning }));
     const mockValues = vi.fn(() => ({
       onConflictDoNothing: mockOnConflictDoNothing,
       onConflictDoUpdate: mockOnConflictDoUpdate,
