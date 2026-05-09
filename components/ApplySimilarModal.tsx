@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatEmailDate, parseFromHeader } from "@/lib/utils/email";
+import { useUserTimezone } from "@/lib/hooks/useUserTimezone";
 
 interface SimilarEmail {
   id: string;
@@ -36,6 +37,7 @@ export default function ApplySimilarModal({
   newTagIcon,
   onApply,
 }: ApplySimilarModalProps) {
+  const timezone = useUserTimezone();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     new Set(similarEmails.map((e) => e.id))
   );
@@ -161,7 +163,7 @@ export default function ApplySimilarModal({
                           {senderName}
                         </h3>
                         <span className="text-xs text-gray-500 whitespace-nowrap">
-                          {formatEmailDate(email.date)}
+                          {formatEmailDate(email.date, timezone)}
                         </span>
                       </div>
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { formatEmailDate, parseFromHeader } from "@/lib/utils/email";
+import { useUserTimezone } from "@/lib/hooks/useUserTimezone";
 import ApplySimilarModal from "./ApplySimilarModal";
 
 interface EmailForReview {
@@ -29,6 +30,7 @@ interface Tag {
 }
 
 export default function ReviewEmailList() {
+  const timezone = useUserTimezone();
   const [emails, setEmails] = useState<EmailForReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -278,7 +280,7 @@ export default function ReviewEmailList() {
                         {senderName}
                       </h3>
                       <span className="text-xs text-gray-500 whitespace-nowrap">
-                        {formatEmailDate(email.date)}
+                        {formatEmailDate(email.date, timezone)}
                       </span>
                     </div>
 

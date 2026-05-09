@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { formatEmailDate, parseFromHeader } from "@/lib/utils/email";
+import { useUserTimezone } from "@/lib/hooks/useUserTimezone";
 import EmailMessage from "./EmailMessage";
 import { useBackgroundSync } from "@/lib/hooks/useBackgroundSync";
 import { SyncProgress } from "./SyncProgress";
@@ -48,6 +49,7 @@ interface EmailMessageData {
 }
 
 export default function EmailList() {
+  const timezone = useUserTimezone();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -881,7 +883,7 @@ export default function EmailList() {
                             </span>
                           )}
                           <span className="text-xs text-slate-500 flex-shrink-0">
-                            {formatEmailDate(thread.date)}
+                            {formatEmailDate(thread.date, timezone)}
                           </span>
                         </div>
                         <h3 className="text-sm sm:text-base font-semibold text-slate-800 mb-0.5 truncate">

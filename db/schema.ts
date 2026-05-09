@@ -162,6 +162,7 @@ export const userSettings = pgTable("user_settings", {
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
   taskManager: varchar("task_manager", { length: 20 }).default("asana").notNull(), // 'asana' | 'todoist' | 'crew'
+  timezone: text("timezone"), // IANA timezone (e.g., "America/New_York"); null = use browser default
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
