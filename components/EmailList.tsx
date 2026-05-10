@@ -89,6 +89,7 @@ export default function EmailList() {
   const [taskManager, setTaskManager] = useState<string>("asana");
   const [todoistModalOpen, setTodoistModalOpen] = useState(false);
   const [crewModalOpen, setCrewModalOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
 
   const { syncState, startSync } = useBackgroundSync();
 
@@ -573,6 +574,59 @@ export default function EmailList() {
   }, [startSync]);
 
 
+  useEffect(() => {
+    if (threads.length === 0) {
+      if (highlightedIndex !== null) setHighlightedIndex(null);
+      return;
+    }
+    if (highlightedIndex !== null && highlightedIndex >= threads.length) {
+      setHighlightedIndex(threads.length - 1);
+    }
+  }, [threads.length, highlightedIndex]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) {
+          return;
+        }
+      }
+
+      if (threads.length === 0) return;
+
+      const key = e.key;
+
+      if (key === "j" || key === "ArrowDown") {
+        e.preventDefault();
+        setHighlightedIndex((prev) => {
+          if (prev === null) return 0;
+          return Math.min(prev + 1, threads.length - 1);
+        });
+      } else if (key === "k" || key === "ArrowUp") {
+        e.preventDefault();
+        setHighlightedIndex((prev) => {
+          if (prev === null) return 0;
+          return Math.max(prev - 1, 0);
+        });
+      } else if (key === "e") {
+        e.preventDefault();
+        const targetIndex = highlightedIndex ?? 0;
+        const targetThread = threads[targetIndex];
+        if (targetThread && !archivingIds.has(targetThread.threadId)) {
+          handleArchiveThread(targetThread.threadId);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threads, highlightedIndex, archivingIds]);
+
   if (loading || syncing) {
     return (
       <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
@@ -845,8 +899,18 @@ export default function EmailList() {
           const isUnsubscribing = unsubscribingIds.has(thread.latestEmailId);
           const isExpanded = expandedThreads.has(thread.threadId);
           const isSelected = selectedThreadIds.has(thread.threadId);
+          const isHighlighted = highlightedIndex === index;
           return (
-            <div key={thread.threadId} className={`transition-all ${isSelected ? 'bg-blue-50 border-l-2 border-blue-500' : 'hover:bg-slate-50'}`}>
+            <div
+              key={thread.threadId}
+              className={`transition-all ${
+                isSelected
+                  ? 'bg-blue-50 border-l-2 border-blue-500'
+                  : isHighlighted
+                  ? 'bg-slate-100 ring-2 ring-inset ring-blue-400'
+                  : 'hover:bg-slate-50'
+              }`}
+            >
               <div className="p-3 sm:p-4">
                 <div className="flex items-start gap-2 sm:gap-3">
                   <input
