@@ -90,6 +90,7 @@ export default function EmailList() {
   const [todoistModalOpen, setTodoistModalOpen] = useState(false);
   const [crewModalOpen, setCrewModalOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
+  const rowRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
   const { syncState, startSync } = useBackgroundSync();
 
@@ -588,6 +589,10 @@ export default function EmailList() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
+      if (filterModalOpen || asanaModalOpen || todoistModalOpen || crewModalOpen) {
+        return;
+      }
+
       const target = e.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
@@ -602,16 +607,14 @@ export default function EmailList() {
 
       if (key === "j" || key === "ArrowDown") {
         e.preventDefault();
-        setHighlightedIndex((prev) => {
-          if (prev === null) return 0;
-          return Math.min(prev + 1, threads.length - 1);
-        });
+        const next = highlightedIndex === null ? 0 : Math.min(highlightedIndex + 1, threads.length - 1);
+        setHighlightedIndex(next);
+        rowRefs.current.get(threads[next].threadId)?.scrollIntoView({ block: "nearest" });
       } else if (key === "k" || key === "ArrowUp") {
         e.preventDefault();
-        setHighlightedIndex((prev) => {
-          if (prev === null) return 0;
-          return Math.max(prev - 1, 0);
-        });
+        const next = highlightedIndex === null ? 0 : Math.max(highlightedIndex - 1, 0);
+        setHighlightedIndex(next);
+        rowRefs.current.get(threads[next].threadId)?.scrollIntoView({ block: "nearest" });
       } else if (key === "e") {
         e.preventDefault();
         const targetIndex = highlightedIndex ?? 0;
@@ -619,13 +622,20 @@ export default function EmailList() {
         if (targetThread && !archivingIds.has(targetThread.threadId)) {
           handleArchiveThread(targetThread.threadId);
         }
+      } else if (key === "t") {
+        e.preventDefault();
+        const targetIndex = highlightedIndex ?? 0;
+        const targetThread = threads[targetIndex];
+        if (targetThread) {
+          handleOpenTaskModal(targetThread);
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threads, highlightedIndex, archivingIds]);
+  }, [threads, highlightedIndex, archivingIds, filterModalOpen, asanaModalOpen, todoistModalOpen, crewModalOpen]);
 
   if (loading || syncing) {
     return (
@@ -903,6 +913,13 @@ export default function EmailList() {
           return (
             <div
               key={thread.threadId}
+              ref={(el) => {
+                if (el) {
+                  rowRefs.current.set(thread.threadId, el);
+                } else {
+                  rowRefs.current.delete(thread.threadId);
+                }
+              }}
               className={`transition-all ${
                 isSelected
                   ? 'bg-blue-50 border-l-2 border-blue-500'
