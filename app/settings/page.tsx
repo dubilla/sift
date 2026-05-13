@@ -5,6 +5,7 @@ import TimezonePreference from "@/components/TimezonePreference";
 import AsanaSettings from "@/components/AsanaSettings";
 import TodoistSettings from "@/components/TodoistSettings";
 import CrewSettings from "@/components/CrewSettings";
+import ReaderSettings from "@/components/ReaderSettings";
 import Link from "next/link";
 import { SignOutButton } from "@/components/SignOutButton";
 import { ReconnectGoogleButton } from "@/components/ReconnectGoogleButton";
@@ -51,6 +52,7 @@ export default async function SettingsPage() {
           <AsanaSettings />
           <TodoistSettings />
           <CrewSettings />
+          <ReaderSettings />
 
           <div className="bg-white shadow rounded-lg p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">

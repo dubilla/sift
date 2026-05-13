@@ -89,6 +89,7 @@ export default function EmailList() {
   const [taskManager, setTaskManager] = useState<string>("asana");
   const [todoistModalOpen, setTodoistModalOpen] = useState(false);
   const [crewModalOpen, setCrewModalOpen] = useState(false);
+  const [readerConnected, setReaderConnected] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   const rowRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
@@ -514,6 +515,13 @@ export default function EmailList() {
         }
       })
       .catch((err) => console.error("Error loading task manager preference:", err));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/reader/status")
+      .then((res) => res.json())
+      .then((data) => setReaderConnected(Boolean(data.connected)))
+      .catch((err) => console.error("Error loading Reader status:", err));
   }, []);
 
   useEffect(() => {
@@ -1239,6 +1247,7 @@ export default function EmailList() {
                           isArchiving={archivingIds.has(message.id)}
                           showArchiveButton={threadMessages[thread.threadId].length > 1}
                           archivedAt={message.archivedAt}
+                          readerConnected={readerConnected}
                         />
                       ))}
                     </div>

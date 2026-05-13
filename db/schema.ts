@@ -192,6 +192,16 @@ export const todoistTasks = pgTable("todoist_tasks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Readwise Reader integration tables
+export const readerSettings = pgTable("reader_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  accessToken: text("access_token").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Crew integration tables
 export const crewSettings = pgTable("crew_settings", {
   userId: text("user_id")
