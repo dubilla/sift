@@ -75,7 +75,7 @@ export default async function Dashboard() {
           </div>
         </div>
 
-        <EmailList />
+        <EmailList userEmail={session.user?.email ?? ""} />
       </div>
     </div>
   );

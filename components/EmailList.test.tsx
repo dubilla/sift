@@ -59,7 +59,7 @@ describe("EmailList — Create task button icon", () => {
   describe("desktop button (title='Create task')", () => {
     it("renders the Todoist icon when taskManager is todoist", async () => {
       setupFetch("todoist");
-      render(<EmailList />);
+      render(<EmailList userEmail="test@example.com" />);
 
       await waitFor(() => {
         const btn = screen.getByTitle("Create task");
@@ -70,7 +70,7 @@ describe("EmailList — Create task button icon", () => {
 
     it("renders the Asana icon when taskManager is asana", async () => {
       setupFetch("asana");
-      render(<EmailList />);
+      render(<EmailList userEmail="test@example.com" />);
 
       await waitFor(() => {
         const btn = screen.getByTitle("Create task");
@@ -93,7 +93,7 @@ describe("EmailList — Create task button icon", () => {
         return Promise.resolve({ json: () => Promise.resolve({ tags: [] }) });
       });
 
-      render(<EmailList />);
+      render(<EmailList userEmail="test@example.com" />);
 
       await waitFor(() => {
         const btn = screen.getByTitle("Create task");
@@ -119,7 +119,7 @@ describe("EmailList — Create task button icon", () => {
 
     it("renders the Todoist icon when taskManager is todoist", async () => {
       setupFetch("todoist");
-      render(<EmailList />);
+      render(<EmailList userEmail="test@example.com" />);
 
       await openMobileMenu();
 
@@ -129,7 +129,7 @@ describe("EmailList — Create task button icon", () => {
 
     it("renders the Asana icon when taskManager is asana", async () => {
       setupFetch("asana");
-      render(<EmailList />);
+      render(<EmailList userEmail="test@example.com" />);
 
       await openMobileMenu();
 

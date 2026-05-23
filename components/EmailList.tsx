@@ -48,7 +48,13 @@ interface EmailMessageData {
   archivedAt?: Date | null;
 }
 
-export default function EmailList() {
+function buildGmailThreadUrl(threadId: string, userEmail: string): string {
+  const base = "https://mail.google.com/mail/";
+  const auth = userEmail ? `?authuser=${encodeURIComponent(userEmail)}` : "";
+  return `${base}${auth}#inbox/${threadId}`;
+}
+
+export default function EmailList({ userEmail }: { userEmail: string }) {
   const timezone = useUserTimezone();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
@@ -637,13 +643,24 @@ export default function EmailList() {
         if (targetThread) {
           handleOpenTaskModal(targetThread);
         }
+      } else if (key === "r") {
+        e.preventDefault();
+        const targetIndex = highlightedIndex ?? 0;
+        const targetThread = threads[targetIndex];
+        if (targetThread) {
+          window.open(
+            buildGmailThreadUrl(targetThread.threadId, userEmail),
+            "_blank",
+            "noopener,noreferrer"
+          );
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threads, highlightedIndex, archivingIds, filterModalOpen, asanaModalOpen, todoistModalOpen, crewModalOpen]);
+  }, [threads, highlightedIndex, archivingIds, filterModalOpen, asanaModalOpen, todoistModalOpen, crewModalOpen, userEmail]);
 
   if (loading || syncing) {
     return (
@@ -1011,6 +1028,21 @@ export default function EmailList() {
                             onClick={() => setOpenMenuThreadId(null)}
                           />
                           <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[160px]">
+                            <a
+                              href={buildGmailThreadUrl(thread.threadId, userEmail)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuThreadId(null);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-blue-700 hover:bg-blue-50 flex items-center gap-2"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                              Open in Gmail
+                            </a>
                             {thread.messageCount > 1 && (
                               <button
                                 onClick={(e) => {
@@ -1191,6 +1223,28 @@ export default function EmailList() {
                         />
                       </svg>
                     </button>
+                    <a
+                      href={buildGmailThreadUrl(thread.threadId, userEmail)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="hidden sm:flex p-1.5 sm:p-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-all shadow-sm btn-action items-center justify-center"
+                      title="Open in Gmail (r)"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2.5}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                        />
+                      </svg>
+                    </a>
                     <button
                       onClick={() => handleArchiveThread(thread.threadId)}
                       disabled={isArchiving}
