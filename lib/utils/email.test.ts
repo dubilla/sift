@@ -1,5 +1,69 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { formatEmailDate, parseFromHeader } from "./email";
+import {
+  formatEmailDate,
+  parseFromHeader,
+  htmlToText,
+  looksLikeHtml,
+} from "./email";
+
+describe("looksLikeHtml", () => {
+  it("detects HTML markup", () => {
+    expect(looksLikeHtml('<div style="font-family: Arial">Hello</div>')).toBe(
+      true
+    );
+    expect(looksLikeHtml("Line one<br>Line two")).toBe(true);
+    expect(looksLikeHtml("<p>Paragraph</p>")).toBe(true);
+  });
+
+  it("does not flag plain text", () => {
+    expect(looksLikeHtml("PS10 is asking families to create an account.")).toBe(
+      false
+    );
+    expect(looksLikeHtml("Math: 3 < 5 and 7 > 2")).toBe(false);
+    expect(looksLikeHtml("Email me at <bkim21@schools.nyc.gov>")).toBe(false);
+  });
+});
+
+describe("htmlToText", () => {
+  it("strips tags and keeps readable content", () => {
+    const html =
+      '<div style="font-family: Arial; color: #333"><p>PS10 is asking families to create a NYCSA account.</p></div>';
+    expect(htmlToText(html)).toBe(
+      "PS10 is asking families to create a NYCSA account."
+    );
+  });
+
+  it("removes style and script blocks entirely", () => {
+    const html =
+      "<style>.logo { width: 100px; }</style><script>track();</script><p>Real content</p>";
+    expect(htmlToText(html)).toBe("Real content");
+  });
+
+  it("converts block elements and <br> to line breaks", () => {
+    const html = "<p>First</p><p>Second</p><div>Third<br>Fourth</div>";
+    expect(htmlToText(html)).toBe("First\nSecond\nThird\nFourth");
+  });
+
+  it("converts list items to dashes", () => {
+    const html = "<ul><li>Grades</li><li>Attendance</li></ul>";
+    expect(htmlToText(html)).toBe("- Grades\n- Attendance");
+  });
+
+  it("decodes HTML entities", () => {
+    expect(htmlToText("Tom &amp; Jerry &nbsp;&quot;quoted&quot; &#39;hi&#39;")).toBe(
+      'Tom & Jerry "quoted" \'hi\''
+    );
+  });
+
+  it("does not double-decode escaped entities", () => {
+    expect(htmlToText("&amp;lt;div&amp;gt;")).toBe("&lt;div&gt;");
+  });
+
+  it("collapses excessive whitespace and blank lines", () => {
+    const html = "<div>  A  </div>\n\n\n<div>B</div><div></div><div></div>";
+    expect(htmlToText(html)).toBe("A\n\nB");
+  });
+});
 
 describe("formatEmailDate", () => {
   beforeEach(() => {

@@ -26,6 +26,45 @@ export function formatEmailDate(dateString: string, timezone?: string | null): s
   }
 }
 
+export function looksLikeHtml(content: string): boolean {
+  return /<\s*(html|body|head|div|p|br|table|tr|td|span|a|img|li|h[1-6]|style|meta)\b/i.test(
+    content
+  );
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(parseInt(n, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&amp;/gi, "&");
+}
+
+export function htmlToText(html: string): string {
+  let text = html
+    .replace(/<(style|script|head|title)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+
+  // Preserve structure: block-level closings and <br> become line breaks
+  text = text
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<li\b[^>]*>/gi, "- ")
+    .replace(/<\/(p|div|tr|li|h[1-6]|table|blockquote|ul|ol)>/gi, "\n");
+
+  text = decodeHtmlEntities(text.replace(/<[^>]+>/g, ""));
+
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ ?\n ?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export interface ParsedEmailAddress {
   name: string;
   email: string;

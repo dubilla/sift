@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { htmlToText, looksLikeHtml } from "@/lib/utils/email";
 
 /**
  * Parse List-Unsubscribe header and extract unsubscribe URL
@@ -243,6 +244,16 @@ export async function getFullEmail(accessToken: string, emailId: string) {
 
     const { html, text } = getBody(emailData.data.payload);
 
+    // Some senders put HTML markup in the text/plain part, and some emails
+    // have no text/plain part at all. Normalize so bodyText is always
+    // readable plaintext (task descriptions in Crew/Todoist/Asana use it).
+    let bodyText = text;
+    if (bodyText && looksLikeHtml(bodyText)) {
+      bodyText = htmlToText(bodyText);
+    } else if (!bodyText && html) {
+      bodyText = htmlToText(html);
+    }
+
     return {
       id: emailData.data.id!,
       threadId: emailData.data.threadId!,
@@ -252,7 +263,7 @@ export async function getFullEmail(accessToken: string, emailId: string) {
       date: new Date(parseInt(emailData.data.internalDate || "0")),
       snippet: emailData.data.snippet || "",
       bodyHtml: html,
-      bodyText: text,
+      bodyText,
     };
   } catch (error) {
     console.error("Error fetching full email:", error);
