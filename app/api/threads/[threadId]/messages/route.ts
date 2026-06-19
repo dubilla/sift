@@ -1,6 +1,6 @@
-import { auth } from "@/auth";
 import { db } from "@/db";
 import { emails } from "@/db/schema";
+import { getCurrentSession } from "@/lib/mobile-auth";
 import { and, eq, isNull, asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getFullEmail } from "@/lib/services/gmail";
@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: { threadId: string } }
 ) {
   try {
-    const session = await auth();
+    const session = await getCurrentSession(request);
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
