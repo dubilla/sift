@@ -99,6 +99,13 @@
       "when": 1778646552396,
       "tag": "0013_rare_arachne",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1781916000000,
+      "tag": "0014_mobile_sessions",
+      "breakpoints": true
     }
   ]
 }

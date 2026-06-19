@@ -1,12 +1,12 @@
-import { auth } from "@/auth";
 import { db } from "@/db";
 import { emails, activityLog, userStats } from "@/db/schema";
+import { getCurrentSession } from "@/lib/mobile-auth";
 import { and, count, countDistinct, eq, gte, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const session = await auth();
+    const session = await getCurrentSession(request);
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

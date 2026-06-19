@@ -56,6 +56,49 @@ export const sessions = pgTable("sessions", {
   expires: timestamp("expires", { mode: "date" }).notNull(),
 });
 
+export const mobileAuthCodes = pgTable(
+  "mobile_auth_codes",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull().unique(),
+    redirectUri: text("redirect_uri").notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    usedAt: timestamp("used_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    codeHashIdx: index("idx_mobile_auth_codes_code_hash").on(table.codeHash),
+    userIdIdx: index("idx_mobile_auth_codes_user_id").on(table.userId),
+  })
+);
+
+export const mobileSessions = pgTable(
+  "mobile_sessions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    deviceName: text("device_name"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+  },
+  (table) => ({
+    tokenHashIdx: index("idx_mobile_sessions_token_hash").on(table.tokenHash),
+    userIdIdx: index("idx_mobile_sessions_user_id").on(table.userId),
+  })
+);
+
 export const verificationTokens = pgTable(
   "verificationTokens",
   {

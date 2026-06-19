@@ -1,7 +1,7 @@
-import { auth } from "@/auth";
 import { db } from "@/db";
 import { emails, activityLog } from "@/db/schema";
 import { archiveEmail } from "@/lib/services/gmail";
+import { getCurrentSession } from "@/lib/mobile-auth";
 import { eq, and, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await auth();
+    const session = await getCurrentSession(request);
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
