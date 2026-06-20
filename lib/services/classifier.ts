@@ -8,26 +8,20 @@ import { classificationCorrections, tags } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { areSimilar, SIMILARITY_THRESHOLD } from "./similarity";
 
-export type SmartTag = "archivable" | "quick_action" | "asana_task" | "unsubscribable";
+// Types live in their own module; re-exported here so existing importers of
+// "@/lib/services/classifier" keep working unchanged.
+export type {
+  SmartTag,
+  ClassificationResult,
+  EmailForClassification,
+} from "./classifier-types";
+import type { ClassificationResult, EmailForClassification, SmartTag } from "./classifier-types";
 
-export interface ClassificationResult {
-  tag: SmartTag | null;
-  confidence: number;
-  source: "rule" | "llm" | "pattern";
-  reason: string;
-}
-
-export interface EmailForClassification {
-  id: string;
-  subject: string | null;
-  from: string;
-  to: string | null;
-  snippet: string | null;
-  hasUnsubscribe: boolean;
-  listId: string | null;
-  isNoreply: boolean;
-  recipientCount: number;
-}
+// The LLM call (cloud vs local) is factored into its own provider module.
+// Imported for use in the pipeline below, and re-exported so any caller
+// importing llmClassify from here still works.
+import { llmClassify } from "./llm-classifier";
+export { llmClassify };
 
 // Confidence threshold for showing tags in UI
 export const CONFIDENCE_THRESHOLD = 0.7;
@@ -235,93 +229,6 @@ export async function patternClassify(
   } catch (error) {
     console.error("Pattern classification error:", error);
     return null;
-  }
-}
-
-/**
- * Classify email using OpenAI
- * Called for emails that quickClassify cannot confidently handle
- */
-export async function llmClassify(
-  email: EmailForClassification,
-  openaiApiKey: string
-): Promise<ClassificationResult> {
-  const prompt = `You are an email classifier. Analyze this email and classify it into exactly ONE category.
-
-Categories:
-- ARCHIVABLE: Newsletter, notification, marketing, FYI-only content that doesn't need action
-- QUICK_ACTION: Needs brief response, RSVP, simple confirmation, quick decision (< 2 min to handle)
-- ASANA_TASK: Represents real work - requests needing follow-up, assignments, projects, complex decisions
-- UNSUBSCRIBABLE: Clearly unwanted marketing or spam the user likely wants to stop receiving
-
-Email:
-From: ${email.from}
-Subject: ${email.subject || "(no subject)"}
-Preview: ${email.snippet || "(no preview)"}
-Has unsubscribe link: ${email.hasUnsubscribe}
-Is from mailing list: ${!!email.listId}
-Is from noreply address: ${email.isNoreply}
-
-Respond with ONLY valid JSON (no markdown):
-{"tag": "archivable|quick_action|asana_task|unsubscribable", "confidence": 0.0-1.0, "reason": "brief explanation"}`;
-
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        temperature: 0.3, // Lower temperature for more consistent classification
-        max_tokens: 100,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("No response from OpenAI");
-    }
-
-    // Parse JSON response
-    const parsed = JSON.parse(content);
-
-    // Validate and normalize
-    const validTags: SmartTag[] = ["archivable", "quick_action", "asana_task", "unsubscribable"];
-    const tag = parsed.tag?.toLowerCase() as SmartTag;
-
-    if (!validTags.includes(tag)) {
-      throw new Error(`Invalid tag: ${parsed.tag}`);
-    }
-
-    return {
-      tag,
-      confidence: Math.min(1, Math.max(0, parsed.confidence || 0.5)),
-      source: "llm",
-      reason: parsed.reason || "LLM classification",
-    };
-  } catch (error) {
-    console.error("LLM classification error:", error);
-    // Return low-confidence result on error
-    return {
-      tag: null,
-      confidence: 0,
-      source: "llm",
-      reason: `Classification failed: ${error instanceof Error ? error.message : "unknown error"}`,
-    };
   }
 }
 
