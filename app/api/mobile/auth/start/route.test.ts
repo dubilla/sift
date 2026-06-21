@@ -18,7 +18,7 @@ describe("GET /api/mobile/auth/start", () => {
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
-      "https://sift.example.com/api/auth/signin/google?callbackUrl=https%3A%2F%2Fsift.example.com%2Fapi%2Fmobile%2Fauth%2Fcallback%3Fredirect_uri%3Dsift%253A%252F%252Fauth%252Fcallback"
+      "https://sift.example.com/api/auth/signin?callbackUrl=https%3A%2F%2Fsift.example.com%2Fapi%2Fmobile%2Fauth%2Fcallback%3Fredirect_uri%3Dsift%253A%252F%252Fauth%252Fcallback"
     );
   });
 
