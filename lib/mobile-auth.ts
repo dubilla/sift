@@ -1,4 +1,3 @@
-import { auth } from "@/auth";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 
 const MOBILE_TOKEN_PREFIX = "sift_mobile_";
@@ -34,6 +33,29 @@ export function mobileRedirectUri(): string {
 
 export function isAllowedMobileRedirectUri(redirectUri: string): boolean {
   return redirectUri === mobileRedirectUri();
+}
+
+export function requestOrigin(request: Request): string {
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const host = forwardedHost || request.headers.get("host");
+
+  if (host) {
+    return `${forwardedProto || inferProtocol(host)}://${host}`;
+  }
+
+  const configuredUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL;
+  if (configuredUrl) {
+    return new URL(configuredUrl).origin;
+  }
+
+  return new URL(request.url).origin;
+}
+
+function inferProtocol(host: string): "http" | "https" {
+  return host.startsWith("localhost") || host.startsWith("127.0.0.1")
+    ? "http"
+    : "https";
 }
 
 export function mobileAuthCodeExpiresAt(): Date {
@@ -198,6 +220,7 @@ export async function getCurrentSession(
   const mobileSession = await getSessionFromMobileToken(request);
   if (mobileSession) return mobileSession;
 
+  const { auth } = await import("@/auth");
   const webSession = await auth();
   if (!webSession?.user?.id) return null;
 
