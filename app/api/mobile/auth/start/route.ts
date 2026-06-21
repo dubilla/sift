@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const callbackUrl = new URL("/api/mobile/auth/callback", origin);
   callbackUrl.searchParams.set("redirect_uri", redirectUri);
 
-  const signInUrl = new URL("/api/auth/signin/google", origin);
+  const signInUrl = new URL("/api/auth/signin", origin);
   signInUrl.searchParams.set("callbackUrl", callbackUrl.toString());
 
   return NextResponse.redirect(signInUrl);
