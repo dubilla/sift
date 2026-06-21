@@ -42,6 +42,8 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 
 describe("GET /api/stats", () => {
+  const request = new Request("https://sift.test/api/stats");
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -49,7 +51,7 @@ describe("GET /api/stats", () => {
   it("returns 401 when user is not authenticated", async () => {
     vi.mocked(auth).mockResolvedValue(null as any);
 
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(401);
@@ -82,7 +84,7 @@ describe("GET /api/stats", () => {
     const mockFrom = vi.fn(() => ({ where: mockWhere }));
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -114,7 +116,7 @@ describe("GET /api/stats", () => {
     const mockFrom = vi.fn(() => ({ where: mockWhere }));
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -137,7 +139,7 @@ describe("GET /api/stats", () => {
     const mockFrom = vi.fn(() => ({ where: mockWhere }));
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -177,7 +179,7 @@ describe("GET /api/stats", () => {
     const mockFrom = vi.fn(() => ({ where: mockWhere }));
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -210,7 +212,7 @@ describe("GET /api/stats", () => {
     const mockFrom = vi.fn(() => ({ where: mockWhere }));
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -243,7 +245,7 @@ describe("GET /api/stats", () => {
     const mockFrom = vi.fn(() => ({ where: mockWhere }));
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -261,7 +263,7 @@ describe("GET /api/stats", () => {
     const mockFrom = vi.fn(() => ({ where: mockWhere }));
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(500);
@@ -284,7 +286,7 @@ describe("GET /api/stats", () => {
     const mockFrom = vi.fn(() => ({ where: mockWhere }));
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(500);
@@ -317,7 +319,7 @@ describe("GET /api/stats", () => {
     const mockFrom = vi.fn(() => ({ where: mockWhere }));
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);

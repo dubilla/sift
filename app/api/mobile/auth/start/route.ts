@@ -1,4 +1,8 @@
-import { isAllowedMobileRedirectUri, mobileRedirectUri } from "@/lib/mobile-auth";
+import {
+  isAllowedMobileRedirectUri,
+  mobileRedirectUri,
+  requestOrigin,
+} from "@/lib/mobile-auth";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -11,10 +15,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid redirect URI" }, { status: 400 });
   }
 
-  const callbackUrl = new URL("/api/mobile/auth/callback", url.origin);
+  const origin = requestOrigin(request);
+  const callbackUrl = new URL("/api/mobile/auth/callback", origin);
   callbackUrl.searchParams.set("redirect_uri", redirectUri);
 
-  const signInUrl = new URL("/api/auth/signin/google", url.origin);
+  const signInUrl = new URL("/api/auth/signin/google", origin);
   signInUrl.searchParams.set("callbackUrl", callbackUrl.toString());
 
   return NextResponse.redirect(signInUrl);
