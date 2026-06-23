@@ -4,6 +4,7 @@ import { emails } from "@/db/schema";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
+import { reauthErrorResponse } from "@/lib/api/token-error";
 import { classifyEmailsBatch } from "@/lib/services/classify-batch";
 import { waitUntil } from "@vercel/functions";
 
@@ -69,6 +70,8 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Error in /api/emails/sync:", error);
+    const reauth = reauthErrorResponse(error);
+    if (reauth) return reauth;
     return NextResponse.json(
       { error: "Failed to sync emails" },
       { status: 500 }

@@ -128,6 +128,50 @@ describe("POST /api/threads/[threadId]/archive", () => {
     expect(data.error).toBe("Failed to archive thread");
   });
 
+  it("returns 401 with a re-auth signal when the Google grant is revoked", async () => {
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user123" },
+    } as any);
+
+    // Shape matches ReauthRequiredError (detected by its `code` marker)
+    const reauthError = Object.assign(
+      new Error(
+        "google authentication has expired or been revoked. Please sign out and sign back in to reconnect google."
+      ),
+      { code: "REAUTH_REQUIRED", provider: "google" }
+    );
+    vi.mocked(getValidAccessToken).mockRejectedValue(reauthError);
+
+    const mockThreadEmails = [
+      {
+        id: "email-1",
+        externalId: "gmail-1",
+        threadId: "thread-123",
+        userId: "user123",
+        subject: "Test",
+        from: "sender@example.com",
+        to: "recipient@example.com",
+        snippet: "Test snippet",
+        date: new Date(),
+        archivedAt: null,
+        deletedAt: null,
+      },
+    ];
+
+    const mockWhere = vi.fn().mockResolvedValue(mockThreadEmails);
+    const mockFrom = vi.fn(() => ({ where: mockWhere }));
+    vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
+
+    const response = await POST(new Request("http://localhost"), {
+      params: { threadId: "thread-123" },
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.code).toBe("REAUTH_REQUIRED");
+    expect(data.provider).toBe("google");
+  });
+
   it("archives all emails in thread successfully", async () => {
     vi.mocked(auth).mockResolvedValue({
       user: { id: "user123" },

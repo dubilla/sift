@@ -5,6 +5,7 @@ import { getUnarchivedEmails } from "@/lib/services/gmail";
 import { classifyEmail, CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
+import { reauthErrorResponse } from "@/lib/api/token-error";
 import { classifyEmailsBatch } from "@/lib/services/classify-batch";
 import { waitUntil } from "@vercel/functions";
 import { eq, and, isNull, count, sql } from "drizzle-orm";
@@ -154,12 +155,12 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Error in /api/emails/sync/background:", error);
 
-    const errorMessage = error instanceof Error ? error.message : "Failed to sync emails";
-    const isAuthError = errorMessage.includes("refresh") || errorMessage.includes("authenticate");
+    const reauth = reauthErrorResponse(error);
+    if (reauth) return reauth;
 
     return NextResponse.json(
-      { error: errorMessage },
-      { status: isAuthError ? 401 : 500 }
+      { error: "Failed to sync emails" },
+      { status: 500 }
     );
   }
 }

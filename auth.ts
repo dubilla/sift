@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { eq, and } from "drizzle-orm";
 import { db } from "@/db";
 import {
   users,
@@ -111,6 +112,47 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = token.id as string;
       }
       return session;
+    },
+  },
+  events: {
+    // The Drizzle adapter only writes OAuth tokens via linkAccount on the FIRST
+    // sign-in for an account. On every subsequent sign-in it leaves the stored
+    // tokens untouched — so a revoked/expired refresh token would never get
+    // replaced, and "sign out and sign back in" wouldn't actually fix it.
+    // Persist the fresh tokens on every sign-in to close that gap.
+    async signIn({ account }) {
+      if (!account) return;
+
+      const updates: {
+        access_token?: string | null;
+        expires_at?: number | null;
+        token_type?: string | null;
+        scope?: string | null;
+        id_token?: string | null;
+        refresh_token?: string | null;
+      } = {
+        access_token: account.access_token,
+        expires_at: account.expires_at,
+        token_type: account.token_type,
+        scope: account.scope,
+        id_token: account.id_token,
+      };
+
+      // Only overwrite the refresh token when the provider issued a new one —
+      // Google omits it on some sign-ins, and we must not null out a good token.
+      if (account.refresh_token) {
+        updates.refresh_token = account.refresh_token;
+      }
+
+      await db
+        .update(accounts)
+        .set(updates)
+        .where(
+          and(
+            eq(accounts.provider, account.provider),
+            eq(accounts.providerAccountId, account.providerAccountId)
+          )
+        );
     },
   },
 });

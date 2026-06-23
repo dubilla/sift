@@ -4,6 +4,7 @@ import { activityLog, emails, readerSettings } from "@/db/schema";
 import { getFullEmail } from "@/lib/services/gmail";
 import { saveToReader } from "@/lib/services/reader";
 import { getValidAccessTokenForProvider } from "@/lib/services/token";
+import { reauthErrorResponse } from "@/lib/api/token-error";
 import { parseFromHeader } from "@/lib/utils/email";
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -104,6 +105,8 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Error in /api/reader/save:", error);
+    const reauth = reauthErrorResponse(error);
+    if (reauth) return reauth;
     return NextResponse.json(
       { error: "Failed to save to Reader" },
       { status: 500 }
