@@ -4,6 +4,7 @@ import { emails } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { getValidAccessTokenForProvider } from "@/lib/services/token";
 import { getFullEmail } from "@/lib/services/gmail";
+import { reauthErrorResponse } from "@/lib/api/token-error";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -56,6 +57,8 @@ export async function GET(
     });
   } catch (error) {
     console.error("Error in /api/emails/[id]:", error);
+    const reauth = reauthErrorResponse(error);
+    if (reauth) return reauth;
     return NextResponse.json(
       { error: "Failed to fetch email" },
       { status: 500 }

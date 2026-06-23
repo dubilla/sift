@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { asanaTasks, activityLog, asanaSettings } from "@/db/schema";
 import { getValidAccessTokenForProvider } from "@/lib/services/token";
 import { createTask, getCurrentUser } from "@/lib/services/asana";
+import { reauthErrorResponse } from "@/lib/api/token-error";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 
@@ -106,6 +107,9 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Error in /api/asana/tasks:", error);
+
+    const reauth = reauthErrorResponse(error);
+    if (reauth) return reauth;
 
     if (error instanceof Error && error.message.includes("No asana account")) {
       return NextResponse.json(

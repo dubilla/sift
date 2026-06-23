@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { emails, activityLog } from "@/db/schema";
 import { inArray, and, isNull } from "drizzle-orm";
 import { getValidAccessToken } from "@/lib/services/token";
+import { reauthErrorResponse } from "@/lib/api/token-error";
 
 export async function POST(request: NextRequest) {
   try {
@@ -94,6 +95,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Bulk archive error:", error);
+    const reauth = reauthErrorResponse(error);
+    if (reauth) return reauth;
     return NextResponse.json(
       { error: "Failed to bulk archive threads" },
       { status: 500 }

@@ -4,6 +4,7 @@ import { activityLog } from "@/db/schema";
 import { createFilter } from "@/lib/services/gmail";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
+import { reauthErrorResponse } from "@/lib/api/token-error";
 
 export async function POST(request: Request) {
   try {
@@ -48,6 +49,8 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Error in /api/filters/create:", error);
+    const reauth = reauthErrorResponse(error);
+    if (reauth) return reauth;
     return NextResponse.json(
       { error: "Failed to create filter" },
       { status: 500 }

@@ -11,6 +11,25 @@ interface TokenRefreshResponse {
 
 type Provider = "google" | "asana" | "todoist";
 
+/**
+ * Thrown when a provider's stored grant can no longer be used to obtain an
+ * access token (refresh token revoked/expired, or missing entirely). The user
+ * must re-authenticate — routes should surface this as a 401 with a re-auth
+ * signal rather than a generic 500.
+ */
+export class ReauthRequiredError extends Error {
+  readonly code = "REAUTH_REQUIRED";
+  readonly provider: Provider;
+
+  constructor(provider: Provider) {
+    super(
+      `${provider} authentication has expired or been revoked. Please sign out and sign back in to reconnect ${provider}.`
+    );
+    this.name = "ReauthRequiredError";
+    this.provider = provider;
+  }
+}
+
 interface ProviderConfig {
   tokenUrl: string;
   clientId: string;
@@ -85,7 +104,7 @@ export async function getValidAccessTokenForProvider(
 
   // Token is expired or expiring soon, refresh it
   if (!account.refresh_token) {
-    throw new Error(`No ${provider} refresh token available`);
+    throw new ReauthRequiredError(provider);
   }
 
   console.log(`[${provider}] Attempting to refresh token for user ${userId}...`);
@@ -112,9 +131,7 @@ export async function getValidAccessTokenForProvider(
 
       // Check if this is an invalid_grant error (revoked/expired refresh token)
       if (error.includes("invalid_grant")) {
-        throw new Error(
-          `${provider} refresh token has been revoked or expired. Please sign out and sign back in to re-authenticate.`
-        );
+        throw new ReauthRequiredError(provider);
       }
 
       throw new Error(`Failed to refresh ${provider} token: ${error}`);

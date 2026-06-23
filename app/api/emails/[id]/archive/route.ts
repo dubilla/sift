@@ -5,6 +5,7 @@ import { archiveEmail } from "@/lib/services/gmail";
 import { eq, and, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
+import { reauthErrorResponse } from "@/lib/api/token-error";
 
 export async function POST(
   request: Request,
@@ -60,6 +61,8 @@ export async function POST(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error in /api/emails/[id]/archive:", error);
+    const reauth = reauthErrorResponse(error);
+    if (reauth) return reauth;
     return NextResponse.json(
       { error: "Failed to archive email" },
       { status: 500 }

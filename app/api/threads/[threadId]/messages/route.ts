@@ -5,6 +5,7 @@ import { and, eq, isNull, asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getFullEmail } from "@/lib/services/gmail";
 import { getValidAccessToken } from "@/lib/services/token";
+import { reauthErrorResponse } from "@/lib/api/token-error";
 
 export async function GET(
   request: Request,
@@ -62,6 +63,8 @@ export async function GET(
     return NextResponse.json({ messages });
   } catch (error) {
     console.error("Error in /api/threads/[threadId]/messages:", error);
+    const reauth = reauthErrorResponse(error);
+    if (reauth) return reauth;
     return NextResponse.json(
       { error: "Failed to fetch thread messages" },
       { status: 500 }
