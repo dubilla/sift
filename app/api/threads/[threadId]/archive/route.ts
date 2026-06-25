@@ -1,23 +1,18 @@
 import { db } from "@/db";
 import { emails, activityLog } from "@/db/schema";
 import { archiveEmail } from "@/lib/services/gmail";
-import { getCurrentSession } from "@/lib/mobile-auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { eq, and, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
 import { reauthErrorResponse } from "@/lib/api/token-error";
 
-export async function POST(
-  request: Request,
+export const POST = withAuth(async (
+  _request,
+  user,
   { params }: { params: { threadId: string } }
-) {
+) => {
   try {
-    const session = await getCurrentSession(request);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const { threadId } = params;
 
     // Get all unarchived emails in this thread
@@ -27,7 +22,7 @@ export async function POST(
       .where(
         and(
           eq(emails.threadId, threadId),
-          eq(emails.userId, session.user.id),
+          eq(emails.userId, user.id),
           isNull(emails.archivedAt),
           isNull(emails.deletedAt)
         )
@@ -41,7 +36,7 @@ export async function POST(
     }
 
     // Get valid access token (refreshes if expired)
-    const accessToken = await getValidAccessToken(session.user.id);
+    const accessToken = await getValidAccessToken(user.id);
 
     // Archive all emails in Gmail
     await Promise.all(
@@ -58,7 +53,7 @@ export async function POST(
     // Log activity for each email
     const activityEntries = emailIds.map((emailId) => ({
       id: crypto.randomUUID(),
-      userId: session.user.id,
+      userId: user.id,
       action: "archive" as const,
       emailId,
     }));
@@ -75,4 +70,4 @@ export async function POST(
       { status: 500 }
     );
   }
-}
+});

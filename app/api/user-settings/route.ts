@@ -1,4 +1,4 @@
-import { getCurrentSession } from "@/lib/mobile-auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
 import { userSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -14,18 +14,12 @@ function isValidTimezone(tz: unknown): tz is string {
   }
 }
 
-export async function GET(request: Request) {
+export const GET = withAuth(async (_request, user) => {
   try {
-    const session = await getCurrentSession(request);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const settings = await db
       .select()
       .from(userSettings)
-      .where(eq(userSettings.userId, session.user.id))
+      .where(eq(userSettings.userId, user.id))
       .limit(1);
 
     if (settings.length === 0) {
@@ -47,16 +41,10 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request, user) => {
   try {
-    const session = await getCurrentSession(request);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await request.json();
     const { taskManager, timezone } = body;
 
@@ -87,7 +75,7 @@ export async function POST(request: Request) {
     await db
       .insert(userSettings)
       .values({
-        userId: session.user.id,
+        userId: user.id,
         taskManager: update.taskManager ?? "asana",
         timezone: update.timezone ?? null,
       })
@@ -104,4 +92,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+});
