@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
 import {
   emails,
@@ -30,14 +30,8 @@ interface ActionResult {
   mailtoUrl?: string;
 }
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request, user) => {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await request.json();
     const { actions } = body as { actions: BatchActionItem[] };
 
@@ -71,7 +65,7 @@ export async function POST(request: Request) {
       .from(emails)
       .where(
         and(
-          eq(emails.userId, session.user.id),
+          eq(emails.userId, user.id),
           inArray(emails.id, emailIds),
           isNull(emails.archivedAt),
           isNull(emails.deletedAt)
@@ -84,7 +78,7 @@ export async function POST(request: Request) {
       (a) => a.action === "archive" || a.action === "unsubscribe"
     );
     const accessToken = needsGmailToken
-      ? await getValidAccessToken(session.user.id)
+      ? await getValidAccessToken(user.id)
       : null;
 
     const hasTaskActions = actions.some((a) => a.action === "create_task");
@@ -98,14 +92,14 @@ export async function POST(request: Request) {
       const [settings] = await db
         .select()
         .from(userSettings)
-        .where(eq(userSettings.userId, session.user.id))
+        .where(eq(userSettings.userId, user.id))
         .limit(1);
 
       taskManager = settings?.taskManager === "todoist" ? "todoist" : "asana";
 
       try {
         taskAccessToken = await getValidAccessTokenForProvider(
-          session.user.id,
+          user.id,
           taskManager
         );
       } catch {
@@ -116,7 +110,7 @@ export async function POST(request: Request) {
         const [asanaConfig] = await db
           .select()
           .from(asanaSettings)
-          .where(eq(asanaSettings.userId, session.user.id))
+          .where(eq(asanaSettings.userId, user.id))
           .limit(1);
 
         asanaDefaults = {
@@ -140,7 +134,7 @@ export async function POST(request: Request) {
         const [todoistConfig] = await db
           .select()
           .from(todoistSettings)
-          .where(eq(todoistSettings.userId, session.user.id))
+          .where(eq(todoistSettings.userId, user.id))
           .limit(1);
 
         todoistDefaults = {
@@ -228,7 +222,7 @@ export async function POST(request: Request) {
             });
 
             await db.insert(asanaTasks).values({
-              userId: session.user.id,
+              userId: user.id,
               emailId: email.id,
               asanaTaskGid: task.gid,
               asanaTaskUrl: task.permalink_url,
@@ -242,7 +236,7 @@ export async function POST(request: Request) {
             });
 
             await db.insert(todoistTasks).values({
-              userId: session.user.id,
+              userId: user.id,
               emailId: email.id,
               todoistTaskId: task.id,
               todoistTaskUrl: task.url,
@@ -321,7 +315,7 @@ export async function POST(request: Request) {
       .filter((r) => r.success)
       .map((r) => ({
         id: crypto.randomUUID(),
-        userId: session.user.id,
+        userId: user.id,
         action: r.action === "create_task" ? `create_${taskManager}_task` : r.action,
         emailId: r.emailId,
       }));
@@ -345,4 +339,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+});

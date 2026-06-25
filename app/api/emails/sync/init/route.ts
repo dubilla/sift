@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
 import { userStats } from "@/db/schema";
 import { getUnarchivedEmailCount } from "@/lib/services/gmail";
@@ -7,15 +7,9 @@ import { getValidAccessToken } from "@/lib/services/token";
 import { reauthErrorResponse } from "@/lib/api/token-error";
 import { eq } from "drizzle-orm";
 
-export async function POST() {
+export const POST = withAuth(async (_request, user) => {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const accessToken = await getValidAccessToken(session.user.id);
+    const accessToken = await getValidAccessToken(user.id);
 
     // Get the total unarchived count from Gmail
     const totalCount = await getUnarchivedEmailCount(accessToken);
@@ -24,7 +18,7 @@ export async function POST() {
     await db
       .insert(userStats)
       .values({
-        userId: session.user.id,
+        userId: user.id,
         totalUnarchivedCount: totalCount,
         totalUnarchived: totalCount,
         updatedAt: new Date(),
@@ -49,4 +43,4 @@ export async function POST() {
       { status: 500 }
     );
   }
-}
+});

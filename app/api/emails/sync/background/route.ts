@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
 import { emails, emailTags, tags, userStats } from "@/db/schema";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
@@ -8,20 +8,14 @@ import { getValidAccessToken } from "@/lib/services/token";
 import { reauthErrorResponse } from "@/lib/api/token-error";
 import { eq, and, isNull, count, sql } from "drizzle-orm";
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request, user) => {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const accessToken = await getValidAccessToken(session.user.id);
+    const accessToken = await getValidAccessToken(user.id);
 
     const statsResult = await db
       .select()
       .from(userStats)
-      .where(eq(userStats.userId, session.user.id));
+      .where(eq(userStats.userId, user.id));
 
     const lastSyncedAt = statsResult[0]?.lastSyncedAt;
 
@@ -33,7 +27,7 @@ export async function POST(request: Request) {
     const emailRecords = result.emails.map((email) => ({
       id: crypto.randomUUID(),
       externalId: email.id,
-      userId: session.user.id,
+      userId: user.id,
       threadId: email.threadId,
       subject: email.subject,
       from: email.from,
@@ -79,7 +73,7 @@ export async function POST(request: Request) {
               recipientCount: record.recipientCount,
             },
             OPENAI_API_KEY,
-            session.user.id
+            user.id
           ).then((classification) => ({ record, classification }))
         )
       );
@@ -113,7 +107,7 @@ export async function POST(request: Request) {
       .from(emails)
       .where(
         and(
-          eq(emails.userId, session.user.id),
+          eq(emails.userId, user.id),
           isNull(emails.archivedAt),
           isNull(emails.deletedAt)
         )
@@ -128,7 +122,7 @@ export async function POST(request: Request) {
       await db
         .update(userStats)
         .set({ lastSyncedAt: new Date() })
-        .where(eq(userStats.userId, session.user.id));
+        .where(eq(userStats.userId, user.id));
     }
 
     return NextResponse.json({
@@ -150,4 +144,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+});

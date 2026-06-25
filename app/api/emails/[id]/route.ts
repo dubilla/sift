@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
 import { emails } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
@@ -7,17 +7,12 @@ import { getFullEmail } from "@/lib/services/gmail";
 import { reauthErrorResponse } from "@/lib/api/token-error";
 import { NextResponse } from "next/server";
 
-export async function GET(
-  request: Request,
+export const GET = withAuth(async (
+  _request,
+  user,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const emailId = params.id;
 
     // Get email from database to verify ownership and get external ID
@@ -27,7 +22,7 @@ export async function GET(
       .where(
         and(
           eq(emails.id, emailId),
-          eq(emails.userId, session.user.id),
+          eq(emails.userId, user.id),
           isNull(emails.deletedAt)
         )
       )
@@ -39,7 +34,7 @@ export async function GET(
 
     // Fetch full email from Gmail
     const accessToken = await getValidAccessTokenForProvider(
-      session.user.id,
+      user.id,
       "google"
     );
 
@@ -64,4 +59,4 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+});

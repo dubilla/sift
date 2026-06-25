@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
 import { emails, activityLog } from "@/db/schema";
 import { archiveEmail } from "@/lib/services/gmail";
@@ -7,17 +7,12 @@ import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
 import { reauthErrorResponse } from "@/lib/api/token-error";
 
-export async function POST(
-  request: Request,
+export const POST = withAuth(async (
+  _request,
+  user,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const emailId = params.id;
 
     const existingEmail = await db
@@ -26,7 +21,7 @@ export async function POST(
       .where(
         and(
           eq(emails.id, emailId),
-          eq(emails.userId, session.user.id),
+          eq(emails.userId, user.id),
           isNull(emails.archivedAt)
         )
       )
@@ -40,7 +35,7 @@ export async function POST(
     }
 
     // Get valid access token (refreshes if expired)
-    const accessToken = await getValidAccessToken(session.user.id);
+    const accessToken = await getValidAccessToken(user.id);
 
     await archiveEmail(accessToken, existingEmail[0].externalId);
 
@@ -53,7 +48,7 @@ export async function POST(
       .insert(activityLog)
       .values({
         id: crypto.randomUUID(),
-        userId: session.user.id,
+        userId: user.id,
         action: "archive",
         emailId: emailId,
       });
@@ -68,4 +63,4 @@ export async function POST(
       { status: 500 }
     );
   }
-}
+});
