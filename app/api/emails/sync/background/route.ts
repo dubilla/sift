@@ -6,8 +6,6 @@ import { classifyEmail, CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
 import { reauthErrorResponse } from "@/lib/api/token-error";
-import { classifyEmailsBatch } from "@/lib/services/classify-batch";
-import { waitUntil } from "@vercel/functions";
 import { eq, and, isNull, count, sql } from "drizzle-orm";
 
 export async function POST(request: Request) {
@@ -52,22 +50,11 @@ export async function POST(request: Request) {
       recipientCount: email.recipientCount,
     }));
 
-    let insertedIds: string[] = [];
     if (emailRecords.length > 0) {
-      const inserted = await db
+      await db
         .insert(emails)
         .values(emailRecords)
-        .onConflictDoNothing({ target: emails.externalId })
-        .returning({ id: emails.id });
-      insertedIds = inserted.map((r) => r.id);
-    }
-
-    if (insertedIds.length > 0) {
-      waitUntil(
-        classifyEmailsBatch(session.user.id, insertedIds).catch((err) => {
-          console.error("Background classification failed:", err);
-        })
-      );
+        .onConflictDoNothing({ target: emails.externalId });
     }
 
     // Auto-classify newly synced emails (parallel, errors don't block sync)
