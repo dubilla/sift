@@ -46,14 +46,14 @@ describe("GET /api/reader/settings", () => {
 
   it("returns 401 when unauthenticated", async () => {
     vi.mocked(auth).mockResolvedValue(null as never);
-    const res = await GET();
+    const res = await GET(new Request("http://localhost"));
     expect(res.status).toBe(401);
   });
 
   it("returns null settings when none stored", async () => {
     vi.mocked(auth).mockResolvedValue({ user: { id: "u1" } } as never);
     mockSelect([]);
-    const res = await GET();
+    const res = await GET(new Request("http://localhost"));
     const data = await res.json();
     expect(data.settings).toBeNull();
   });
@@ -61,7 +61,7 @@ describe("GET /api/reader/settings", () => {
   it("returns hasAccessToken=true (never the raw token)", async () => {
     vi.mocked(auth).mockResolvedValue({ user: { id: "u1" } } as never);
     mockSelect([{ userId: "u1", accessToken: "rwsk_secret" }]);
-    const res = await GET();
+    const res = await GET(new Request("http://localhost"));
     const data = await res.json();
     expect(data.settings).toEqual({ hasAccessToken: true });
     expect(JSON.stringify(data)).not.toContain("rwsk_secret");
@@ -127,7 +127,7 @@ describe("DELETE /api/reader/settings", () => {
 
   it("returns 401 when unauthenticated", async () => {
     vi.mocked(auth).mockResolvedValue(null as never);
-    const res = await DELETE();
+    const res = await DELETE(new Request("http://localhost"));
     expect(res.status).toBe(401);
   });
 
@@ -135,7 +135,7 @@ describe("DELETE /api/reader/settings", () => {
     vi.mocked(auth).mockResolvedValue({ user: { id: "u1" } } as never);
     const where = vi.fn().mockResolvedValue({});
     vi.mocked(db.delete).mockReturnValue({ where } as never);
-    const res = await DELETE();
+    const res = await DELETE(new Request("http://localhost"));
     expect(res.status).toBe(200);
     expect(where).toHaveBeenCalled();
   });

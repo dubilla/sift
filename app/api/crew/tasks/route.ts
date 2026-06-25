@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getCurrentSession } from "@/lib/mobile-auth";
 import { db } from "@/db";
 import { activityLog, crewSettings, crewTasks } from "@/db/schema";
 import { createTask } from "@/lib/services/crew";
@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   try {
-    const session = await auth();
+    const session = await getCurrentSession(request);
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getCurrentSession } from "@/lib/mobile-auth";
 import { db } from "@/db";
 import { asanaTasks, activityLog, asanaSettings } from "@/db/schema";
 import { getValidAccessTokenForProvider } from "@/lib/services/token";
@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 
 export async function POST(request: Request) {
   try {
-    const session = await auth();
+    const session = await getCurrentSession(request);
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

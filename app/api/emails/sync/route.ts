@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getCurrentSession } from "@/lib/mobile-auth";
 import { db } from "@/db";
 import { emails } from "@/db/schema";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
@@ -10,7 +10,7 @@ import { waitUntil } from "@vercel/functions";
 
 export async function POST(request: Request) {
   try {
-    const session = await auth();
+    const session = await getCurrentSession(request);
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
