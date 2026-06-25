@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getCurrentSession } from "@/lib/mobile-auth";
 import { db } from "@/db";
 import { emails, emailTags, tags } from "@/db/schema";
 import { classifyEmail, CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
@@ -6,7 +6,7 @@ import { eq, and, isNull, inArray, desc, sql, notExists } from "drizzle-orm";
 
 export async function POST(request: Request) {
   try {
-    const session = await auth();
+    const session = await getCurrentSession(request);
 
     if (!session?.user?.id) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
@@ -155,9 +155,9 @@ export async function POST(request: Request) {
 }
 
 // GET: Get classification stats
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const session = await auth();
+    const session = await getCurrentSession(request);
 
     if (!session?.user?.id) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });

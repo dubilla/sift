@@ -1,11 +1,11 @@
-import { auth } from "@/auth";
+import { getCurrentSession } from "@/lib/mobile-auth";
 import { getValidAccessTokenForProvider } from "@/lib/services/token";
 import { getProjects } from "@/lib/services/asana";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
   try {
-    const session = await auth();
+    const session = await getCurrentSession(request);
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

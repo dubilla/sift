@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getCurrentSession } from "@/lib/mobile-auth";
 import { db } from "@/db";
 import { emails, activityLog } from "@/db/schema";
 import { inArray, and, isNull } from "drizzle-orm";
@@ -9,7 +9,7 @@ import { reauthErrorResponse } from "@/lib/api/token-error";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
+    const session = await getCurrentSession(request);
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

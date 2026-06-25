@@ -295,7 +295,7 @@ describe("GET /api/emails/classify", () => {
   it("returns 401 when not authenticated", async () => {
     vi.mocked(auth).mockResolvedValue(null as any);
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost"));
     const data = await response.json();
 
     expect(response.status).toBe(401);
@@ -342,7 +342,7 @@ describe("GET /api/emails/classify", () => {
       return { from: vi.fn().mockResolvedValue([]) } as any;
     });
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost"));
     const data = await response.json();
 
     expect(response.status).toBe(200);
