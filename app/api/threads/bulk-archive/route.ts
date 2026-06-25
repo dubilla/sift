@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { emails, activityLog } from "@/db/schema";
 import { inArray, and, isNull } from "drizzle-orm";
+import { batchArchiveEmails } from "@/lib/services/gmail";
 import { getValidAccessToken } from "@/lib/services/token";
 import { reauthErrorResponse } from "@/lib/api/token-error";
 
@@ -51,33 +52,8 @@ export async function POST(request: NextRequest) {
       .set({ archivedAt: new Date() })
       .where(inArray(emails.threadId, threadIds));
 
-    // Batch modify to remove INBOX label from all emails
     const gmailIds = threadEmails.map((email) => email.externalId);
-
-    // Gmail API supports batch modify with up to 1000 IDs at a time
-    const batchSize = 1000;
-    for (let i = 0; i < gmailIds.length; i += batchSize) {
-      const batch = gmailIds.slice(i, i + batchSize);
-
-      const response = await fetch(
-        "https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ids: batch,
-            removeLabelIds: ["INBOX"],
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to archive emails via Gmail API");
-      }
-    }
+    await batchArchiveEmails(accessToken, gmailIds);
 
     // Log activity for each email
     const activityEntries = threadEmails.map((email) => ({

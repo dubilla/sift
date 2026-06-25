@@ -1,7 +1,8 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { emails, userStats } from "@/db/schema";
+import { emails, emailTags, tags, userStats } from "@/db/schema";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
+import { classifyEmail, CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
 import { reauthErrorResponse } from "@/lib/api/token-error";
@@ -69,6 +70,56 @@ export async function POST(request: Request) {
       );
     }
 
+    // Auto-classify newly synced emails (parallel, errors don't block sync)
+    let classifiedCount = 0;
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (OPENAI_API_KEY && emailRecords.length > 0) {
+      const allTags = await db.select().from(tags);
+      const tagsByName = new Map(allTags.map((t) => [t.name, t]));
+
+      const classifyResults = await Promise.allSettled(
+        emailRecords.map((record) =>
+          classifyEmail(
+            {
+              id: record.id,
+              subject: record.subject || null,
+              from: record.from,
+              to: record.to || null,
+              snippet: record.snippet || null,
+              hasUnsubscribe: record.hasUnsubscribe,
+              listId: record.listId,
+              isNoreply: record.isNoreply,
+              recipientCount: record.recipientCount,
+            },
+            OPENAI_API_KEY,
+            session.user.id
+          ).then((classification) => ({ record, classification }))
+        )
+      );
+
+      for (const result of classifyResults) {
+        if (result.status !== "fulfilled") continue;
+        const { record, classification } = result.value;
+
+        if (classification.tag && classification.confidence >= CONFIDENCE_THRESHOLD) {
+          const tag = tagsByName.get(classification.tag);
+          if (tag) {
+            await db
+              .insert(emailTags)
+              .values({
+                id: crypto.randomUUID(),
+                emailId: record.id,
+                tagId: tag.id,
+                source: classification.source,
+                confidence: classification.confidence,
+              })
+              .onConflictDoNothing();
+            classifiedCount++;
+          }
+        }
+      }
+    }
+
     // Get current count of unarchived emails in DB
     const dbCountResult = await db
       .select({ count: count() })
@@ -95,6 +146,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       synced: emailRecords.length,
+      classified: classifiedCount,
       nextPageToken: result.nextPageToken,
       currentCount: currentDbCount,
       totalCount,
