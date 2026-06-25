@@ -1,21 +1,15 @@
-import { auth } from "@/auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
 import { accounts } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
-export async function POST() {
+export const POST = withAuth(async (_request, user) => {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     await db
       .delete(accounts)
       .where(
         and(
-          eq(accounts.userId, session.user.id),
+          eq(accounts.userId, user.id),
           eq(accounts.provider, "google")
         )
       );
@@ -28,4 +22,4 @@ export async function POST() {
       { status: 500 }
     );
   }
-}
+});

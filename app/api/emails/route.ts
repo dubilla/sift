@@ -1,23 +1,17 @@
-import { auth } from "@/auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
 import { emails } from "@/db/schema";
 import { and, eq, isNull, desc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export const GET = withAuth(async (_request, user) => {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const userEmails = await db
       .select()
       .from(emails)
       .where(
         and(
-          eq(emails.userId, session.user.id),
+          eq(emails.userId, user.id),
           isNull(emails.archivedAt),
           isNull(emails.deletedAt)
         )
@@ -33,4 +27,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});

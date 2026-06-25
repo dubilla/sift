@@ -30,12 +30,15 @@ export function withAuth<Ctx = unknown>(
     user: AuthedUser,
     context: Ctx
   ) => Response | Promise<Response>
-): (request: Request, context: Ctx) => Promise<Response> {
+): (request: Request, context?: Ctx) => Promise<Response> {
+  // `context` is optional so callers (and tests) of non-dynamic routes can omit
+  // it; Next.js always supplies it for dynamic routes, where the handler reads
+  // `params` from it.
   return async (request, context) => {
     const session = await getCurrentSession(request);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return handler(request, { id: session.user.id }, context);
+    return handler(request, { id: session.user.id }, context as Ctx);
   };
 }

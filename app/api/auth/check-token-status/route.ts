@@ -1,22 +1,16 @@
-import { auth } from "@/auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
 import { accounts } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
-export async function GET() {
+export const GET = withAuth(async (_request, user) => {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const userAccounts = await db
       .select()
       .from(accounts)
       .where(
         and(
-          eq(accounts.userId, session.user.id),
+          eq(accounts.userId, user.id),
           eq(accounts.provider, "google")
         )
       )
@@ -54,4 +48,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});

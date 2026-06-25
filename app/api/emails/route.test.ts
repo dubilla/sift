@@ -38,7 +38,7 @@ describe("GET /api/emails", () => {
   it("returns 401 when user is not authenticated", async () => {
     vi.mocked(auth).mockResolvedValue(null as any);
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost"));
     const data = await response.json();
 
     expect(response.status).toBe(401);
@@ -50,7 +50,7 @@ describe("GET /api/emails", () => {
       user: {},
     } as any);
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost"));
     const data = await response.json();
 
     expect(response.status).toBe(401);
@@ -92,7 +92,7 @@ describe("GET /api/emails", () => {
 
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost"));
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -114,7 +114,7 @@ describe("GET /api/emails", () => {
 
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
-    await GET();
+    await GET(new Request("http://localhost"));
 
     expect(mockWhere).toHaveBeenCalledWith(
       expect.objectContaining({ type: "and" })
@@ -130,7 +130,7 @@ describe("GET /api/emails", () => {
       throw new Error("Database connection failed");
     });
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost"));
     const data = await response.json();
 
     expect(response.status).toBe(500);
