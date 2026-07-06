@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { emails, activityLog } from "@/db/schema";
-import { archiveEmail } from "@/lib/services/gmail";
+import { batchArchiveEmails } from "@/lib/services/gmail";
 import { withAuth } from "@/lib/api/with-auth";
 import { eq, and, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -38,9 +38,12 @@ export const POST = withAuth(async (
     // Get valid access token (refreshes if expired)
     const accessToken = await getValidAccessToken(user.id);
 
-    // Archive all emails in Gmail
-    await Promise.all(
-      threadEmails.map((email) => archiveEmail(accessToken, email.externalId))
+    // Archive all emails in Gmail in a single batch request.
+    // (A per-message Promise.all fans out N concurrent calls and trips
+    // Gmail's per-user concurrency limit — 429 RESOURCE_EXHAUSTED — on large threads.)
+    await batchArchiveEmails(
+      accessToken,
+      threadEmails.map((email) => email.externalId)
     );
 
     // Update all emails in database

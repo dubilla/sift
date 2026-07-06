@@ -36,7 +36,7 @@ vi.mock("@/db/schema", () => ({
 }));
 
 vi.mock("@/lib/services/gmail", () => ({
-  archiveEmail: vi.fn(),
+  batchArchiveEmails: vi.fn(),
 }));
 
 vi.mock("@/lib/services/token", () => ({
@@ -51,7 +51,7 @@ vi.mock("drizzle-orm", () => ({
 
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { archiveEmail } from "@/lib/services/gmail";
+import { batchArchiveEmails } from "@/lib/services/gmail";
 import { getValidAccessToken } from "@/lib/services/token";
 
 describe("POST /api/threads/[threadId]/archive", () => {
@@ -223,7 +223,7 @@ describe("POST /api/threads/[threadId]/archive", () => {
     });
 
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-    vi.mocked(archiveEmail).mockResolvedValue(true);
+    vi.mocked(batchArchiveEmails).mockResolvedValue(undefined);
 
     const mockUpdateWhere = vi.fn().mockResolvedValue(undefined);
     const mockUpdateSet = vi.fn(() => ({ where: mockUpdateWhere }));
@@ -252,9 +252,11 @@ describe("POST /api/threads/[threadId]/archive", () => {
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.archivedCount).toBe(2);
-    expect(archiveEmail).toHaveBeenCalledTimes(2);
-    expect(archiveEmail).toHaveBeenCalledWith("mock-token", "gmail-1");
-    expect(archiveEmail).toHaveBeenCalledWith("mock-token", "gmail-2");
+    expect(batchArchiveEmails).toHaveBeenCalledTimes(1);
+    expect(batchArchiveEmails).toHaveBeenCalledWith("mock-token", [
+      "gmail-1",
+      "gmail-2",
+    ]);
   });
 
   it("returns 500 on Gmail API error", async () => {
@@ -292,7 +294,7 @@ describe("POST /api/threads/[threadId]/archive", () => {
     });
 
     vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-    vi.mocked(archiveEmail).mockRejectedValue(new Error("Gmail API error"));
+    vi.mocked(batchArchiveEmails).mockRejectedValue(new Error("Gmail API error"));
 
     const response = await POST(new Request("http://localhost"), {
       params: { threadId: "thread-123" },
