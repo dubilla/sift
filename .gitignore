@@ -41,3 +41,6 @@ PRD.md
 backlog.md
 
 reviews
+
+# git worktrees
+.worktrees/
