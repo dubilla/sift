@@ -12,34 +12,31 @@ permissions:
   contents: read
   pull-requests: read
 
+env:
+  NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+  NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+  GITHUB_TOKEN: ${{ github.token }}
+
 jobs:
   cleanup-closed-pr:
     name: Cleanup Neon branch for closed PR
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Delete Neon preview branch
-        run: |
-          BRANCH_NAME="preview/pr-${{ github.event.pull_request.number }}"
-          BRANCH_ID=$(curl --fail --silent --show-error \
-            -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
-            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches" \
-            | jq -r --arg name "$BRANCH_NAME" '.branches[] | select(.name == $name) | .id')
+      - uses: actions/checkout@v4
 
-          if [ -n "$BRANCH_ID" ] && [ "$BRANCH_ID" != "null" ]; then
-            curl --fail --silent --show-error -X DELETE \
-              -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
-              "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches/${BRANCH_ID}"
-            echo "Deleted $BRANCH_NAME"
-          else
-            echo "No Neon branch found for $BRANCH_NAME, nothing to clean up"
-          fi
+      - name: Delete Neon preview branch
+        env:
+          BRANCH_NAME: preview/pr-${{ github.event.pull_request.number }}
+        run: .github/scripts/neon-preview-cleanup.sh delete-preview-branch
 
   cleanup-deleted-git-branch:
     name: Cleanup Neon branch for deleted Git branch
     if: github.event_name == 'delete' && github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Find PRs for deleted branch
         id: prs
         run: |
@@ -47,8 +44,8 @@ jobs:
           HEAD_QUERY="${{ github.repository_owner }}:${DELETED_BRANCH}"
           ENCODED_HEAD=$(printf '%s' "$HEAD_QUERY" | jq -sRr @uri)
           PR_NUMBERS=$(curl --fail --silent --show-error \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/pulls?head=${ENCODED_HEAD}&state=all&per_page=100" \
             | jq -r '.[].number')
 
@@ -61,24 +58,14 @@ jobs:
       - name: Delete Neon preview branches
         if: steps.prs.outputs.numbers != ''
         run: |
-          NEON_BRANCHES=$(curl --fail --silent --show-error \
-            -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
-            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches")
-
           while IFS= read -r PR_NUMBER; do
             [ -n "$PR_NUMBER" ] || continue
-
-            BRANCH_NAME="preview/pr-${PR_NUMBER}"
-            BRANCH_ID=$(printf '%s' "$NEON_BRANCHES" \
-              | jq -r --arg name "$BRANCH_NAME" '.branches[] | select(.name == $name) | .id')
-
-            if [ -n "$BRANCH_ID" ] && [ "$BRANCH_ID" != "null" ]; then
-              curl --fail --silent --show-error -X DELETE \
-                -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
-                "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches/${BRANCH_ID}"
-              echo "Deleted $BRANCH_NAME for deleted Git branch ${{ github.event.ref }}"
+            export BRANCH_NAME="preview/pr-${PR_NUMBER}"
+            if .github/scripts/neon-preview-cleanup.sh delete-preview-branch; then
+              echo "Deleted ${BRANCH_NAME} for deleted Git branch ${{ github.event.ref }}"
             else
-              echo "No Neon branch found for $BRANCH_NAME"
+              echo "Failed to delete ${BRANCH_NAME} for deleted Git branch ${{ github.event.ref }}" >&2
+              exit 1
             fi
           done <<< "${{ steps.prs.outputs.numbers }}"
 
@@ -91,45 +78,9 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Delete Neon preview branches without open PRs
-        run: |
-          OPEN_PR_NUMBERS=$(
-            PAGE=1
-            while :; do
-              RESPONSE=$(curl --fail --silent --show-error \
-                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/pulls?state=open&per_page=100&page=${PAGE}")
-              COUNT=$(printf '%s' "$RESPONSE" | jq 'length')
-
-              printf '%s' "$RESPONSE" | jq -r '.[].number'
-
-              if [ "$COUNT" -lt 100 ]; then
-                break
-              fi
-
-              PAGE=$((PAGE + 1))
-            done
-          )
-
-          NEON_BRANCHES=$(curl --fail --silent --show-error \
-            -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
-            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches")
-
-          printf '%s' "$NEON_BRANCHES" \
-            | jq -r '.branches[] | select(.name | test("^preview/pr-[0-9]+$")) | [.id, .name] | @tsv' \
-            | while IFS=$'\t' read -r BRANCH_ID BRANCH_NAME; do
-                PR_NUMBER="${BRANCH_NAME#preview/pr-}"
-
-                if printf '%s\n' "$OPEN_PR_NUMBERS" | grep -qx "$PR_NUMBER"; then
-                  echo "Keeping $BRANCH_NAME because PR #$PR_NUMBER is open"
-                  continue
-                fi
-
-                curl --fail --silent --show-error -X DELETE \
-                  -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
-                  "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches/${BRANCH_ID}"
-                echo "Deleted orphaned $BRANCH_NAME"
-              done
-
-          echo "Reconciliation complete"
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: .github/scripts/neon-preview-cleanup.sh reconcile-preview-branches
