@@ -133,7 +133,7 @@ describe("GET /api/threads", () => {
     expect(params).toContain("archivable");
   });
 
-  it("filters to untagged emails when tag=unclassified", async () => {
+  it("filters to emails without a visible tag when tag=unclassified", async () => {
     signIn();
     vi.mocked(db.execute).mockResolvedValue([] as any);
 
@@ -141,6 +141,8 @@ describe("GET /api/threads", () => {
 
     const { sql, params } = executedQuery();
     expect(sql).toMatch(/AND NOT EXISTS \(/);
+    // Emails with only a hidden low-confidence guess still count as unclassified
+    expect(sql).toMatch(/WHERE et\.email_id = e\.id AND et\.confidence >= 0\.7/);
     expect(params).not.toContain("unclassified");
   });
 

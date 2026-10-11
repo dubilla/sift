@@ -24,7 +24,8 @@ export async function GET(request: Request) {
     const tagCondition =
       tagFilter === "unclassified"
         ? sql`AND NOT EXISTS (
-            SELECT 1 FROM email_tags et WHERE et.email_id = e.id
+            SELECT 1 FROM email_tags et
+            WHERE et.email_id = e.id AND et.confidence >= 0.7
           )`
         : tagFilter
         ? sql`AND EXISTS (
