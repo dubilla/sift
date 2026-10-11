@@ -18,6 +18,8 @@
     "db:studio": "drizzle-kit studio",
     "db:studio:prod": "NODE_ENV=production drizzle-kit studio",
     "db:backfill-unsubscribe": "tsx db/backfill-unsubscribe.ts",
+    "db:backfill-classifications": "tsx db/backfill-classifications.ts",
+    "db:backfill-classifications:prod": "NODE_ENV=production tsx db/backfill-classifications.ts",
     "db:seed-tags": "tsx db/seed-tags.ts",
     "db:recreate-orphaned-asana-tasks": "tsx db/recreate-orphaned-asana-tasks.ts",
     "sift": "tsx cli/sift.ts"

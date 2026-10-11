@@ -72,26 +72,61 @@ function parseClassification(content: string | null | undefined): Classification
   };
 }
 
-async function callOpenAI(email: EmailForClassification, apiKey: string): Promise<string | null> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [{ role: "user", content: buildPrompt(email) }],
-      temperature: 0.3, // consistent classification
-      max_tokens: 100,
-    }),
-  });
+const OPENAI_MAX_RETRIES = 3;
+const OPENAI_TIMEOUT_MS = 30_000;
 
-  if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.status}`);
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function callOpenAI(email: EmailForClassification, apiKey: string): Promise<string | null> {
+  for (let attempt = 0; ; attempt++) {
+    const backoffMs = 500 * 2 ** attempt;
+    const canRetry = attempt < OPENAI_MAX_RETRIES;
+
+    let response: Response;
+    try {
+      response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          messages: [{ role: "user", content: buildPrompt(email) }],
+          temperature: 0.3, // consistent classification
+          max_tokens: 100,
+        }),
+        signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
+      });
+    } catch (err) {
+      // Network blip or timeout: retry rather than lose the email
+      if (!canRetry) throw err;
+      await sleep(backoffMs);
+      continue;
+    }
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content ?? null;
+    }
+
+    // 429 means either a rate limit (worth retrying) or exhausted credits
+    // (not). Surface the code so quota problems are obvious in logs.
+    const body = await response.json().catch(() => ({}));
+    const code: string | undefined = body?.error?.code ?? body?.error?.type;
+    const retryable =
+      (response.status === 429 && code !== "insufficient_quota" && code !== "credit_balance_exhausted") ||
+      response.status >= 500;
+
+    if (!retryable || !canRetry) {
+      throw new Error(`OpenAI API error: ${response.status}${code ? ` (${code})` : ""}`);
+    }
+
+    const retryAfterMs = Number(response.headers.get("retry-after-ms")) ||
+      Number(response.headers.get("retry-after")) * 1000 ||
+      backoffMs;
+    await sleep(Math.min(retryAfterMs, 10_000));
   }
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content ?? null;
 }
 
 async function callOllama(email: EmailForClassification): Promise<string | null> {

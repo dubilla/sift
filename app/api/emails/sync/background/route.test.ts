@@ -152,7 +152,7 @@ describe("POST /api/emails/sync/background", () => {
       nextPageToken: undefined,
       resultSizeEstimate: 1,
     } as any);
-    vi.mocked(classifyEmailsBatch).mockResolvedValue({ classified: 1, total: 1 });
+    vi.mocked(classifyEmailsBatch).mockResolvedValue({ classified: 1, failed: 0, total: 1 });
 
     setupDbMocks({ insertedIds: ["email-1"] });
 
@@ -174,7 +174,7 @@ describe("POST /api/emails/sync/background", () => {
       nextPageToken: undefined,
       resultSizeEstimate: 2,
     } as any);
-    vi.mocked(classifyEmailsBatch).mockResolvedValue({ classified: 1, total: 1 });
+    vi.mocked(classifyEmailsBatch).mockResolvedValue({ classified: 1, failed: 0, total: 1 });
 
     // gmail-1 already exists in the DB; only gmail-2 is inserted
     setupDbMocks({ insertedIds: ["email-2"] });
@@ -223,11 +223,11 @@ describe("POST /api/emails/sync/background", () => {
     const order: string[] = [];
     vi.mocked(classifyEmailsBatch).mockImplementation(async () => {
       order.push("inserted");
-      return { classified: 1, total: 1 };
+      return { classified: 1, failed: 0, total: 1 };
     });
     vi.mocked(classifyUntaggedBacklog).mockImplementation(async () => {
       order.push("backlog");
-      return { classified: 0, total: 0 };
+      return { classified: 0, failed: 0, total: 0 };
     });
 
     setupDbMocks({ insertedIds: ["email-1"] });
@@ -247,8 +247,8 @@ describe("POST /api/emails/sync/background", () => {
       nextPageToken: undefined,
       resultSizeEstimate: 0,
     } as any);
-    vi.mocked(classifyEmailsBatch).mockResolvedValue({ classified: 0, total: 0 });
-    vi.mocked(classifyUntaggedBacklog).mockResolvedValue({ classified: 0, total: 0 });
+    vi.mocked(classifyEmailsBatch).mockResolvedValue({ classified: 0, failed: 0, total: 0 });
+    vi.mocked(classifyUntaggedBacklog).mockResolvedValue({ classified: 0, failed: 0, total: 0 });
 
     setupDbMocks({ insertedIds: [] });
 
