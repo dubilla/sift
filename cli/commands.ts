@@ -28,7 +28,7 @@ Commands:
   logout                Revoke the stored token and delete it
   health [--since 24h] [--json]
                         Show sync/classification health for your account
-  emails [--since 24h] [--untagged] [--archived|--deleted] [--limit 50] [--json]
+  emails [--since 24h] [--untagged] [--archived|--deleted] [--limit 50] [--show-content] [--json]
                         List recent emails (ids, tags, linked tasks; no content)
   email <id> [--show-content] [--json]
                         Tags, corrections, activity and tasks for one email
@@ -151,6 +151,7 @@ export async function emails(args: string[], io: Io = consoleIo): Promise<void> 
       archived: { type: "boolean", default: false },
       deleted: { type: "boolean", default: false },
       limit: { type: "string", default: String(DEFAULT_EMAIL_LIMIT) },
+      "show-content": { type: "boolean", default: false },
       json: { type: "boolean", default: false },
     },
   });
@@ -168,6 +169,7 @@ export async function emails(args: string[], io: Io = consoleIo): Promise<void> 
   if (values.untagged) query.set("untagged", "1");
   if (values.archived) query.set("archived", "1");
   if (values.deleted) query.set("deleted", "1");
+  if (values["show-content"]) query.set("content", "1");
 
   const report = await diagnosticsGet<EmailsReport>(`/api/diagnostics/emails?${query}`, "Listing emails");
   io.out(values.json ? JSON.stringify(report, null, 2) : formatEmailsTable(report));

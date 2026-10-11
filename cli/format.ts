@@ -59,7 +59,7 @@ export function formatEmailsTable(report: EmailsReport): string {
       ...(e.subject !== undefined ? [e.subject ?? ""] : []),
     ];
   });
-  const headers = ["ID", "DATE", "STATE", "TAGS", "TASKS", ...(rows[0].length > 5 ? ["SUBJECT"] : [])];
+  const headers = ["ID", "DATE", "STATE", "TAGS", "TASKS", ...(report.emails[0].subject !== undefined ? ["SUBJECT"] : [])];
   return [...table(headers, rows), "", `${report.count} email(s), last ${report.window.since}`].join("\n");
 }
 
