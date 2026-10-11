@@ -26,16 +26,16 @@ jobs:
       - name: Get PR number
         id: pr
         run: |
-          REF="${{ github.event.deployment.ref }}"
-          BRANCH="${REF##refs/heads/}"
-          ENCODED_BRANCH=$(printf '%s' "$BRANCH" | jq -sRr @uri)
+          # Vercel sets deployment.ref to the commit SHA, not the branch name,
+          # so look up the open PR by the deployed commit instead.
+          SHA="${{ github.event.deployment.sha }}"
           PR_NUMBER=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:${ENCODED_BRANCH}&state=open" \
-            | jq -r '.[0].number')
+            "https://api.github.com/repos/${{ github.repository }}/commits/${SHA}/pulls" \
+            | jq -r '[.[] | select(.state == "open")][0].number')
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-            echo "No open PR found for branch ${BRANCH}, skipping migrations"
+            echo "No open PR found for commit ${SHA}, skipping migrations"
             exit 0
           fi
           echo "number=${PR_NUMBER}" >> $GITHUB_OUTPUT
