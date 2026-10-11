@@ -3,9 +3,17 @@ import { createServer } from "http";
 import type { AddressInfo } from "net";
 import { hostname } from "os";
 import { parseArgs } from "util";
-import { DEFAULT_SINCE, parseSince, type HealthReport } from "../lib/diagnostics";
+import {
+  DEFAULT_EMAIL_LIMIT,
+  DEFAULT_SINCE,
+  MAX_EMAIL_LIMIT,
+  parseSince,
+  type EmailDetail,
+  type EmailsReport,
+  type HealthReport,
+} from "../lib/diagnostics";
 import { deleteCredential, loadCredential, saveCredential, type Credential } from "./credentials";
-import { formatHealthTable } from "./format";
+import { formatEmailDetail, formatEmailsTable, formatHealthTable } from "./format";
 
 // The production deployment. Override with SIFT_API_URL (e.g. http://localhost:3003
 // for local dev, or a preview deployment URL).
@@ -20,6 +28,11 @@ Commands:
   logout                Revoke the stored token and delete it
   health [--since 24h] [--json]
                         Show sync/classification health for your account
+  emails [--since 24h] [--untagged] [--archived|--deleted] [--limit 50] [--json]
+                        List recent emails (ids, tags, linked tasks; no content)
+  email <id> [--show-content] [--json]
+                        Tags, corrections, activity and tasks for one email
+                        (<id> is the Sift id or the Gmail message id)
 
 Environment:
   SIFT_API_URL          API base URL (default: ${DEFAULT_API_URL})`;
@@ -85,6 +98,32 @@ async function requireCredential(base: string): Promise<Credential> {
   return credential;
 }
 
+// GET a diagnostics endpoint as the logged-in user and parse the JSON body.
+async function diagnosticsGet<T>(path: string, what: string): Promise<T> {
+  const base = apiUrl();
+  const credential = await requireCredential(base);
+  const response = await apiFetch(base, path, {
+    headers: { authorization: `Bearer ${credential.token}` },
+  });
+
+  if (response.status === 401) {
+    throw new CliError(
+      `Your session for ${base} is no longer valid (expired or revoked). Run \`sift login\` again.`
+    );
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new CliError(`${what} failed (${response.status}): ${body?.error ?? response.statusText}`);
+  }
+  return (await response.json()) as T;
+}
+
+function checkSince(since: string): void {
+  if (parseSince(since) === null) {
+    throw new CliError(`Invalid --since ${JSON.stringify(since)}; use e.g. 30m, 24h, 7d (max 30d).`, 2);
+  }
+}
+
 export async function health(args: string[], io: Io = consoleIo): Promise<void> {
   const { values } = parseArgs({
     args,
@@ -94,30 +133,65 @@ export async function health(args: string[], io: Io = consoleIo): Promise<void> 
     },
   });
   const since = values.since!;
-  if (parseSince(since) === null) {
-    throw new CliError(`Invalid --since ${JSON.stringify(since)}; use e.g. 30m, 24h, 7d (max 30d).`, 2);
-  }
+  checkSince(since);
 
-  const base = apiUrl();
-  const credential = await requireCredential(base);
-  const response = await apiFetch(
-    base,
+  const report = await diagnosticsGet<HealthReport>(
     `/api/diagnostics/health?since=${encodeURIComponent(since)}`,
-    { headers: { authorization: `Bearer ${credential.token}` } }
+    "Health check"
   );
-
-  if (response.status === 401) {
-    throw new CliError(
-      `Your session for ${base} is no longer valid (expired or revoked). Run \`sift login\` again.`
-    );
-  }
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new CliError(`Health check failed (${response.status}): ${body?.error ?? response.statusText}`);
-  }
-
-  const report = (await response.json()) as HealthReport;
   io.out(values.json ? JSON.stringify(report, null, 2) : formatHealthTable(report));
+}
+
+export async function emails(args: string[], io: Io = consoleIo): Promise<void> {
+  const { values } = parseArgs({
+    args,
+    options: {
+      since: { type: "string", default: DEFAULT_SINCE },
+      untagged: { type: "boolean", default: false },
+      archived: { type: "boolean", default: false },
+      deleted: { type: "boolean", default: false },
+      limit: { type: "string", default: String(DEFAULT_EMAIL_LIMIT) },
+      json: { type: "boolean", default: false },
+    },
+  });
+  const since = values.since!;
+  checkSince(since);
+  const limit = Number(values.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EMAIL_LIMIT) {
+    throw new CliError(`Invalid --limit ${JSON.stringify(values.limit)}; use 1 to ${MAX_EMAIL_LIMIT}.`, 2);
+  }
+  if (values.archived && values.deleted) {
+    throw new CliError("--archived and --deleted can't be combined; pick one.", 2);
+  }
+
+  const query = new URLSearchParams({ since, limit: String(limit) });
+  if (values.untagged) query.set("untagged", "1");
+  if (values.archived) query.set("archived", "1");
+  if (values.deleted) query.set("deleted", "1");
+
+  const report = await diagnosticsGet<EmailsReport>(`/api/diagnostics/emails?${query}`, "Listing emails");
+  io.out(values.json ? JSON.stringify(report, null, 2) : formatEmailsTable(report));
+}
+
+export async function email(args: string[], io: Io = consoleIo): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      "show-content": { type: "boolean", default: false },
+      json: { type: "boolean", default: false },
+    },
+  });
+  if (positionals.length !== 1) {
+    throw new CliError("Usage: sift email <id> [--show-content] [--json]", 2);
+  }
+
+  const query = values["show-content"] ? "?content=1" : "";
+  const detail = await diagnosticsGet<EmailDetail>(
+    `/api/diagnostics/emails/${encodeURIComponent(positionals[0])}${query}`,
+    "Fetching email"
+  );
+  io.out(values.json ? JSON.stringify(detail, null, 2) : formatEmailDetail(detail));
 }
 
 function openBrowser(url: string): void {
@@ -266,6 +340,12 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         return 0;
       case "health":
         await health(args, io);
+        return 0;
+      case "emails":
+        await emails(args, io);
+        return 0;
+      case "email":
+        await email(args, io);
         return 0;
       case undefined:
       case "help":

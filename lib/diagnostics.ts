@@ -30,3 +30,60 @@ export interface HealthReport {
   integration_tasks: { asana: number; todoist: number; crew: number };
   warnings: string[];
 }
+
+export const DEFAULT_EMAIL_LIMIT = 50;
+export const MAX_EMAIL_LIMIT = 200;
+
+export interface LinkedTaskIds {
+  asana: string[];
+  todoist: string[];
+  crew: string[];
+}
+
+export interface EmailSummary {
+  id: string;
+  externalId: string;
+  threadId: string | null;
+  date: string;
+  archivedAt: string | null;
+  deletedAt: string | null;
+  tags: string[];
+  hasUnsubscribe: boolean;
+  tasks: LinkedTaskIds;
+  // Only present with ?content=1
+  subject?: string | null;
+  from?: string;
+  snippet?: string | null;
+}
+
+export interface EmailsReport {
+  window: { since: string; from: string; to: string };
+  count: number;
+  emails: EmailSummary[];
+}
+
+export interface IntegrationTaskRow {
+  provider: "asana" | "todoist" | "crew";
+  id: string;
+  taskId: string;
+  url: string | null;
+  createdAt: string;
+  // Only present with ?content=1
+  taskName?: string;
+}
+
+export interface EmailDetail {
+  email: Omit<EmailSummary, "tags" | "tasks"> & { createdAt: string };
+  tags: { name: string; source: string; confidence: number | null; classifiedAt: string }[];
+  corrections: {
+    id: string;
+    oldTag: string | null;
+    newTag: string | null;
+    oldSource: string | null;
+    oldConfidence: number | null;
+    correctedAt: string;
+    appliedToSimilar: boolean;
+  }[];
+  activity: { id: string; action: string; createdAt: string }[];
+  integrationTasks: IntegrationTaskRow[];
+}
