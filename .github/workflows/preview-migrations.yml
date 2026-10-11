@@ -47,10 +47,14 @@ jobs:
           BRANCH_NAME="preview/pr-${{ steps.pr.outputs.number }}"
 
           # Check if branch already exists
-          BRANCH_ID=$(curl -s \
+          BRANCHES=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
-            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches" \
-            | jq -r --arg name "$BRANCH_NAME" '.branches[] | select(.name == $name) | .id')
+            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches")
+          if ! echo "$BRANCHES" | jq -e '.branches' > /dev/null; then
+            echo "Failed to list Neon branches: $(echo "$BRANCHES" | jq -r '.message // .')"
+            exit 1
+          fi
+          BRANCH_ID=$(echo "$BRANCHES" | jq -r --arg name "$BRANCH_NAME" '.branches[] | select(.name == $name) | .id')
 
           # Create branch if it doesn't exist
           if [ -z "$BRANCH_ID" ] || [ "$BRANCH_ID" = "null" ]; then
