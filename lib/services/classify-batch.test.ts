@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { sql as rawSql, type SQL } from "drizzle-orm";
 
 vi.mock("@/db", () => ({
   db: {
@@ -14,7 +16,7 @@ vi.mock("@/lib/services/classifier", () => ({
 
 import { db } from "@/db";
 import { classifyEmail } from "@/lib/services/classifier";
-import { classifyEmailsBatch, classifyUntaggedBacklog } from "./classify-batch";
+import { classifyEmailsBatch, classifyUntaggedBacklog, findUntaggedEmails } from "./classify-batch";
 
 const dbMock = db as unknown as {
   select: ReturnType<typeof vi.fn>;
@@ -92,7 +94,7 @@ describe("classifyEmailsBatch", () => {
   it("returns early when emailIds is empty without touching the DB", async () => {
     const result = await classifyEmailsBatch("user-1", []);
 
-    expect(result).toEqual({ classified: 0, total: 0 });
+    expect(result).toEqual({ classified: 0, failed: 0, total: 0 });
     expect(dbMock.select).not.toHaveBeenCalled();
     expect(dbMock.insert).not.toHaveBeenCalled();
     expect(classifyEmailMock).not.toHaveBeenCalled();
@@ -104,7 +106,7 @@ describe("classifyEmailsBatch", () => {
 
     const result = await classifyEmailsBatch("user-1", ["email-1"]);
 
-    expect(result).toEqual({ classified: 0, total: 1 });
+    expect(result).toEqual({ classified: 0, failed: 1, total: 1 });
     expect(dbMock.select).not.toHaveBeenCalled();
     expect(classifyEmailMock).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalled();
@@ -125,7 +127,7 @@ describe("classifyEmailsBatch", () => {
 
     const result = await classifyEmailsBatch("user-1", ["email-1"]);
 
-    expect(result).toEqual({ classified: 1, total: 1 });
+    expect(result).toEqual({ classified: 1, failed: 0, total: 1 });
     expect(values).toHaveBeenCalledWith(
       expect.objectContaining({
         emailId: "email-1",
@@ -149,7 +151,7 @@ describe("classifyEmailsBatch", () => {
 
     const result = await classifyEmailsBatch("user-1", ["email-1"]);
 
-    expect(result).toEqual({ classified: 0, total: 1 });
+    expect(result).toEqual({ classified: 0, failed: 0, total: 1 });
     expect(values).toHaveBeenCalledWith(
       expect.objectContaining({ emailId: "email-1", tagId: "tag-archivable", confidence: 0.5 })
     );
@@ -168,7 +170,7 @@ describe("classifyEmailsBatch", () => {
 
     const result = await classifyEmailsBatch("user-1", ["email-1"]);
 
-    expect(result).toEqual({ classified: 0, total: 1 });
+    expect(result).toEqual({ classified: 0, failed: 1, total: 1 });
     expect(values).not.toHaveBeenCalled();
   });
 
@@ -185,7 +187,7 @@ describe("classifyEmailsBatch", () => {
 
     const result = await classifyEmailsBatch("user-1", ["email-1"]);
 
-    expect(result).toEqual({ classified: 0, total: 1 });
+    expect(result).toEqual({ classified: 0, failed: 1, total: 1 });
     expect(values).not.toHaveBeenCalled();
   });
 
@@ -208,7 +210,7 @@ describe("classifyEmailsBatch", () => {
 
     const result = await classifyEmailsBatch("user-1", ["email-1", "email-2"]);
 
-    expect(result).toEqual({ classified: 1, total: 2 });
+    expect(result).toEqual({ classified: 1, failed: 1, total: 2 });
     expect(values).toHaveBeenCalledTimes(1);
     expect(values).toHaveBeenCalledWith(
       expect.objectContaining({ emailId: "email-2" })
@@ -222,7 +224,7 @@ describe("classifyEmailsBatch", () => {
 
     const result = await classifyEmailsBatch("user-1", ["email-missing"]);
 
-    expect(result).toEqual({ classified: 0, total: 0 });
+    expect(result).toEqual({ classified: 0, failed: 0, total: 0 });
     expect(classifyEmailMock).not.toHaveBeenCalled();
     expect(values).not.toHaveBeenCalled();
   });
@@ -270,7 +272,7 @@ describe("classifyUntaggedBacklog", () => {
     const result = await classifyUntaggedBacklog("user-1");
 
     expect(limit).toHaveBeenCalledWith(25);
-    expect(result).toEqual({ classified: 1, total: 1 });
+    expect(result).toEqual({ classified: 1, failed: 0, total: 1 });
     expect(values).toHaveBeenCalledWith(expect.objectContaining({ emailId: "email-1" }));
   });
 
@@ -279,7 +281,56 @@ describe("classifyUntaggedBacklog", () => {
 
     const result = await classifyUntaggedBacklog("user-1");
 
-    expect(result).toEqual({ classified: 0, total: 0 });
+    expect(result).toEqual({ classified: 0, failed: 0, total: 0 });
     expect(classifyEmailMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("findUntaggedEmails", () => {
+  const dialect = new PgDialect();
+
+  // Capture the outer query's where/orderBy so the predicate can be rendered
+  function captureQuery() {
+    const captured: { where?: SQL; orderBy?: unknown[] } = {};
+    dbMock.select.mockReset();
+    dbMock.select
+      .mockReturnValueOnce({
+        from: () => ({
+          where: (where: SQL) => {
+            captured.where = where;
+            return {
+              orderBy: (...orderBy: unknown[]) => {
+                captured.orderBy = orderBy;
+                return { limit: () => Promise.resolve([]) };
+              },
+            };
+          },
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({ where: () => rawSql`(select 1)` }),
+      });
+    return captured;
+  }
+
+  it("pages strictly past the cursor, breaking date ties by id", async () => {
+    const captured = captureQuery();
+    const before = { date: new Date("2026-10-01T12:00:00Z"), id: "email-50" };
+
+    await findUntaggedEmails("user-1", { limit: 50, before });
+
+    const { sql, params } = dialect.sqlToQuery(captured.where!);
+    expect(sql).toMatch(/\("emails"\."date" < \$\d+ or \("emails"\."date" = \$\d+ and "emails"\."id" < \$\d+\)\)/);
+    expect(params).toContain("email-50");
+    expect(captured.orderBy).toHaveLength(2);
+  });
+
+  it("has no cursor predicate on the first page", async () => {
+    const captured = captureQuery();
+
+    await findUntaggedEmails("user-1", { limit: 50 });
+
+    const { sql } = dialect.sqlToQuery(captured.where!);
+    expect(sql).not.toMatch(/"emails"\."date" </);
   });
 });

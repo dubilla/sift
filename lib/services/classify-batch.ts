@@ -1,21 +1,29 @@
 import { db } from "@/db";
 import { emails, emailTags, tags } from "@/db/schema";
 import { classifyEmail, CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
-import { and, desc, eq, inArray, isNull, notExists } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, notExists, or } from "drizzle-orm";
 
 const CONCURRENCY = 5;
 const BACKLOG_BATCH_SIZE = 25;
 
+/**
+ * classified: stored at or above the confidence threshold (visible).
+ * failed: nothing stored (LLM error, unknown tag, or exception), so the email
+ * stays untagged and will be retried. The remainder were stored as hidden
+ * low-confidence guesses.
+ */
+export type BatchResult = { classified: number; failed: number; total: number };
+
 export async function classifyEmailsBatch(
   userId: string,
   emailIds: string[]
-): Promise<{ classified: number; total: number }> {
-  if (emailIds.length === 0) return { classified: 0, total: 0 };
+): Promise<BatchResult> {
+  if (emailIds.length === 0) return { classified: 0, failed: 0, total: 0 };
 
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) {
     console.warn("classifyEmailsBatch: OPENAI_API_KEY not set, skipping");
-    return { classified: 0, total: emailIds.length };
+    return { classified: 0, failed: emailIds.length, total: emailIds.length };
   }
 
   const toClassify = await db
@@ -23,12 +31,13 @@ export async function classifyEmailsBatch(
     .from(emails)
     .where(and(eq(emails.userId, userId), inArray(emails.id, emailIds)));
 
-  if (toClassify.length === 0) return { classified: 0, total: 0 };
+  if (toClassify.length === 0) return { classified: 0, failed: 0, total: 0 };
 
   const allTags = await db.select().from(tags);
   const tagsByName = new Map(allTags.map((t) => [t.name, t]));
 
   let classifiedCount = 0;
+  let failedCount = 0;
 
   const classifyOne = async (email: (typeof toClassify)[number]) => {
     try {
@@ -52,24 +61,26 @@ export async function classifyEmailsBatch(
       // low-confidence tags, and the stored row marks the email as attempted so
       // backlog catch-up doesn't pay to re-classify it. Failures (null tag)
       // write nothing, so they get retried.
-      if (result.tag) {
-        const tag = tagsByName.get(result.tag);
-        if (tag) {
-          await db
-            .insert(emailTags)
-            .values({
-              id: crypto.randomUUID(),
-              emailId: email.id,
-              tagId: tag.id,
-              source: result.source,
-              confidence: result.confidence,
-            })
-            .onConflictDoNothing();
-          if (result.confidence >= CONFIDENCE_THRESHOLD) classifiedCount++;
-        }
+      const tag = result.tag ? tagsByName.get(result.tag) : undefined;
+      if (!tag) {
+        failedCount++;
+        return;
       }
+
+      await db
+        .insert(emailTags)
+        .values({
+          id: crypto.randomUUID(),
+          emailId: email.id,
+          tagId: tag.id,
+          source: result.source,
+          confidence: result.confidence,
+        })
+        .onConflictDoNothing();
+      if (result.confidence >= CONFIDENCE_THRESHOLD) classifiedCount++;
     } catch (err) {
       console.error(`classifyEmailsBatch: failed for email ${email.id}`, err);
+      failedCount++;
     }
   };
 
@@ -78,20 +89,24 @@ export async function classifyEmailsBatch(
     await Promise.all(chunk.map(classifyOne));
   }
 
-  return { classified: classifiedCount, total: toClassify.length };
+  return { classified: classifiedCount, failed: failedCount, total: toClassify.length };
 }
 
+/** Keyset cursor over untagged emails, newest first. */
+export type UntaggedCursor = { date: Date; id: string };
+
 /**
- * Classify the newest emails that have never been classified (no email_tags
- * row). Catches up on emails synced before auto-classification worked, or
- * whose classification call failed.
+ * The newest emails that have never been classified (no email_tags row),
+ * strictly older than `before` when given. Every attempt that succeeds writes a
+ * row, so re-running this naturally moves on; the cursor additionally lets a
+ * single run step past emails that failed instead of re-fetching them forever.
  */
-export async function classifyUntaggedBacklog(
+export async function findUntaggedEmails(
   userId: string,
-  limit = BACKLOG_BATCH_SIZE
-): Promise<{ classified: number; total: number }> {
-  const untagged = await db
-    .select({ id: emails.id })
+  { limit, before }: { limit: number; before?: UntaggedCursor }
+): Promise<UntaggedCursor[]> {
+  return db
+    .select({ id: emails.id, date: emails.date })
     .from(emails)
     .where(
       and(
@@ -103,12 +118,29 @@ export async function classifyUntaggedBacklog(
             .select({ emailId: emailTags.emailId })
             .from(emailTags)
             .where(eq(emailTags.emailId, emails.id))
-        )
+        ),
+        before
+          ? or(
+              lt(emails.date, before.date),
+              and(eq(emails.date, before.date), lt(emails.id, before.id))
+            )
+          : undefined
       )
     )
-    .orderBy(desc(emails.date))
+    .orderBy(desc(emails.date), desc(emails.id))
     .limit(limit);
+}
 
+/**
+ * Classify the newest emails that have never been classified. Catches up on
+ * emails synced before auto-classification worked, or whose classification
+ * call failed.
+ */
+export async function classifyUntaggedBacklog(
+  userId: string,
+  limit = BACKLOG_BATCH_SIZE
+): Promise<BatchResult> {
+  const untagged = await findUntaggedEmails(userId, { limit });
   return classifyEmailsBatch(
     userId,
     untagged.map((e) => e.id)
