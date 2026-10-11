@@ -72,10 +72,15 @@ jobs:
             echo "Created branch ${BRANCH_NAME} with ID ${BRANCH_ID}"
           fi
 
-          POSTGRES_URL=$(curl -s \
+          CONNECTION=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
-            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/connection_uri?branch_id=${BRANCH_ID}&pooled=true" \
-            | jq -r '.uri')
+            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/connection_uri?branch_id=${BRANCH_ID}&database_name=neondb&role_name=neondb_owner&pooled=true")
+          POSTGRES_URL=$(echo "$CONNECTION" | jq -r '.uri // empty')
+          if [ -z "$POSTGRES_URL" ]; then
+            echo "Failed to get Neon connection URI: $(echo "$CONNECTION" | jq -r '.message // .')"
+            exit 1
+          fi
+          echo "::add-mask::${POSTGRES_URL}"
           echo "postgres_url=${POSTGRES_URL}" >> $GITHUB_OUTPUT
 
       - name: Run migrations
