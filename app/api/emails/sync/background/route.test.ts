@@ -14,9 +14,7 @@ vi.mock("@/db", () => ({
 }));
 
 vi.mock("@/db/schema", () => ({
-  emails: { externalId: "externalId", userId: "userId", archivedAt: "archivedAt", deletedAt: "deletedAt" },
-  emailTags: {},
-  tags: {},
+  emails: { id: "id", externalId: "externalId", userId: "userId", archivedAt: "archivedAt", deletedAt: "deletedAt" },
   userStats: { userId: "userId" },
 }));
 
@@ -28,9 +26,12 @@ vi.mock("@/lib/services/token", () => ({
   getValidAccessToken: vi.fn(),
 }));
 
-vi.mock("@/lib/services/classifier", () => ({
-  classifyEmail: vi.fn(),
-  CONFIDENCE_THRESHOLD: 0.7,
+vi.mock("@/lib/services/classify-batch", () => ({
+  classifyEmailsBatch: vi.fn(),
+}));
+
+vi.mock("@vercel/functions", () => ({
+  waitUntil: vi.fn(),
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -38,17 +39,14 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...args: unknown[]) => ({ type: "and", args })),
   isNull: vi.fn((col) => ({ type: "isNull", col })),
   count: vi.fn(() => "count_fn"),
-  sql: Object.assign(
-    vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ type: "sql", strings, values })),
-    { raw: vi.fn((s: string) => s) }
-  ),
 }));
 
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
 import { getValidAccessToken } from "@/lib/services/token";
-import { classifyEmail } from "@/lib/services/classifier";
+import { classifyEmailsBatch } from "@/lib/services/classify-batch";
+import { waitUntil } from "@vercel/functions";
 
 const mockSession = { user: { id: "user-123" } };
 
@@ -69,16 +67,15 @@ const mockGmailEmail = {
 
 // The route calls db in this order:
 // 1. db.select().from(userStats).where() -> stats
-// 2. db.insert(emails).values().onConflictDoNothing() -> insert emails
-// 3. db.select().from(tags) -> all tags (only if OPENAI_API_KEY set and emails > 0)
-// 4. db.insert(emailTags).values().onConflictDoNothing() -> per classified email
-// 5. db.select({count}).from(emails).where() -> count
-// 6. db.update(userStats).set().where() -> update lastSyncedAt (if complete)
+// 2. db.insert(emails).values().onConflictDoNothing().returning() -> inserted IDs
+// 3. waitUntil(classifyEmailsBatch(userId, insertedIds)) -> after response
+// 4. db.select({count}).from(emails).where() -> count
+// 5. db.update(userStats).set().where() -> update lastSyncedAt (if complete)
 
-function setupDbMocks({ hasTags = true }: { hasTags?: boolean } = {}) {
+function setupDbMocks({ insertedIds = ["email-1"] }: { insertedIds?: string[] } = {}) {
   let selectCallCount = 0;
 
-  vi.mocked(db.select).mockImplementation((...args: any[]) => {
+  vi.mocked(db.select).mockImplementation(() => {
     selectCallCount++;
 
     if (selectCallCount === 1) {
@@ -90,16 +87,7 @@ function setupDbMocks({ hasTags = true }: { hasTags?: boolean } = {}) {
       } as any;
     }
 
-    if (selectCallCount === 2 && hasTags) {
-      // tags query: .from(tags) -> resolves directly
-      return {
-        from: vi.fn().mockResolvedValue([
-          { id: "tag-arch", name: "archivable", displayName: "Archive" },
-        ]),
-      } as any;
-    }
-
-    // count query or other: .from(emails).where(...)
+    // count query: .from(emails).where(...)
     return {
       from: vi.fn(() => ({
         where: vi.fn().mockResolvedValue([{ count: 50 }]),
@@ -107,7 +95,10 @@ function setupDbMocks({ hasTags = true }: { hasTags?: boolean } = {}) {
     } as any;
   });
 
-  const mockOnConflictDoNothing = vi.fn().mockResolvedValue(undefined);
+  // onConflictDoNothing skips emails that already exist, so .returning() only
+  // yields the rows actually inserted.
+  const mockReturning = vi.fn().mockResolvedValue(insertedIds.map((id) => ({ id })));
+  const mockOnConflictDoNothing = vi.fn(() => ({ returning: mockReturning }));
   const mockValues = vi.fn(() => ({ onConflictDoNothing: mockOnConflictDoNothing }));
   vi.mocked(db.insert).mockReturnValue({ values: mockValues } as any);
 
@@ -116,6 +107,15 @@ function setupDbMocks({ hasTags = true }: { hasTags?: boolean } = {}) {
   vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
 
   return { mockValues, mockOnConflictDoNothing };
+}
+
+function postSync() {
+  return POST(
+    new Request("http://localhost/api/emails/sync/background", {
+      method: "POST",
+      body: JSON.stringify({}),
+    })
+  );
 }
 
 describe("POST /api/emails/sync/background", () => {
@@ -143,7 +143,7 @@ describe("POST /api/emails/sync/background", () => {
     expect(data.error).toBe("Unauthorized");
   });
 
-  it("syncs emails and auto-classifies them", async () => {
+  it("syncs emails and classifies the newly inserted ones", async () => {
     vi.mocked(auth).mockResolvedValue(mockSession as any);
     vi.mocked(getValidAccessToken).mockResolvedValue("token");
     vi.mocked(getUnarchivedEmails).mockResolvedValue({
@@ -151,122 +151,67 @@ describe("POST /api/emails/sync/background", () => {
       nextPageToken: undefined,
       resultSizeEstimate: 1,
     } as any);
+    vi.mocked(classifyEmailsBatch).mockResolvedValue({ classified: 1, total: 1 });
 
-    vi.mocked(classifyEmail).mockResolvedValue({
-      tag: "archivable",
-      confidence: 0.85,
-      source: "rule",
-      reason: "Transactional notification",
-    });
+    setupDbMocks({ insertedIds: ["email-1"] });
 
-    setupDbMocks();
-
-    const request = new Request("http://localhost/api/emails/sync/background", {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-
-    const response = await POST(request);
+    const response = await postSync();
     const data = await response.json();
 
     expect(response.status).toBe(200);
     expect(data.synced).toBe(1);
-    expect(data.classified).toBe(1);
     expect(data.isComplete).toBe(true);
-    expect(classifyEmail).toHaveBeenCalledTimes(1);
+    expect(classifyEmailsBatch).toHaveBeenCalledWith("user-123", ["email-1"]);
+    expect(waitUntil).toHaveBeenCalledTimes(1);
   });
 
-  it("skips classification when OPENAI_API_KEY is not set", async () => {
-    delete process.env.OPENAI_API_KEY;
-
+  it("passes only the ids returned by the insert to classifyEmailsBatch", async () => {
     vi.mocked(auth).mockResolvedValue(mockSession as any);
     vi.mocked(getValidAccessToken).mockResolvedValue("token");
     vi.mocked(getUnarchivedEmails).mockResolvedValue({
-      emails: [mockGmailEmail],
-      nextPageToken: undefined,
-      resultSizeEstimate: 1,
-    } as any);
-
-    setupDbMocks({ hasTags: false });
-
-    const request = new Request("http://localhost/api/emails/sync/background", {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
-
-    expect(data.synced).toBe(1);
-    expect(data.classified).toBe(0);
-    expect(classifyEmail).not.toHaveBeenCalled();
-  });
-
-  it("does not count low-confidence classifications", async () => {
-    vi.mocked(auth).mockResolvedValue(mockSession as any);
-    vi.mocked(getValidAccessToken).mockResolvedValue("token");
-    vi.mocked(getUnarchivedEmails).mockResolvedValue({
-      emails: [mockGmailEmail],
-      nextPageToken: undefined,
-      resultSizeEstimate: 1,
-    } as any);
-
-    vi.mocked(classifyEmail).mockResolvedValue({
-      tag: "archivable",
-      confidence: 0.5, // Below threshold of 0.7
-      source: "llm",
-      reason: "Not sure",
-    });
-
-    setupDbMocks();
-
-    const request = new Request("http://localhost/api/emails/sync/background", {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
-
-    expect(data.synced).toBe(1);
-    expect(data.classified).toBe(0);
-  });
-
-  it("continues syncing when classification throws", async () => {
-    vi.mocked(auth).mockResolvedValue(mockSession as any);
-    vi.mocked(getValidAccessToken).mockResolvedValue("token");
-
-    const email2 = { ...mockGmailEmail, id: "gmail-2" };
-    vi.mocked(getUnarchivedEmails).mockResolvedValue({
-      emails: [mockGmailEmail, email2],
+      emails: [mockGmailEmail, { ...mockGmailEmail, id: "gmail-2" }],
       nextPageToken: undefined,
       resultSizeEstimate: 2,
     } as any);
+    vi.mocked(classifyEmailsBatch).mockResolvedValue({ classified: 1, total: 1 });
 
-    vi.mocked(classifyEmail)
-      .mockRejectedValueOnce(new Error("API timeout"))
-      .mockResolvedValueOnce({
-        tag: "archivable",
-        confidence: 0.85,
-        source: "rule",
-        reason: "Test",
-      });
+    // gmail-1 already exists in the DB; only gmail-2 is inserted
+    setupDbMocks({ insertedIds: ["email-2"] });
+
+    const response = await postSync();
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.synced).toBe(2);
+    expect(classifyEmailsBatch).toHaveBeenCalledWith("user-123", ["email-2"]);
+  });
+
+  it("still completes the sync when classification throws", async () => {
+    vi.mocked(auth).mockResolvedValue(mockSession as any);
+    vi.mocked(getValidAccessToken).mockResolvedValue("token");
+    vi.mocked(getUnarchivedEmails).mockResolvedValue({
+      emails: [mockGmailEmail],
+      nextPageToken: undefined,
+      resultSizeEstimate: 1,
+    } as any);
+    vi.mocked(classifyEmailsBatch).mockRejectedValue(new Error("DB down"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
     setupDbMocks();
 
-    const request = new Request("http://localhost/api/emails/sync/background", {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-
-    const response = await POST(request);
+    const response = await postSync();
     const data = await response.json();
+    await vi.mocked(waitUntil).mock.calls[0][0];
 
-    expect(data.synced).toBe(2);
-    expect(data.classified).toBe(1); // One succeeded, one failed
+    expect(response.status).toBe(200);
+    expect(data.synced).toBe(1);
+    expect(data.isComplete).toBe(true);
+    expect(db.update).toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith("Background sync classification failed:", expect.any(Error));
+    consoleError.mockRestore();
   });
 
-  it("returns classified: 0 when no emails synced", async () => {
+  it("skips classification when nothing new was inserted", async () => {
     vi.mocked(auth).mockResolvedValue(mockSession as any);
     vi.mocked(getValidAccessToken).mockResolvedValue("token");
     vi.mocked(getUnarchivedEmails).mockResolvedValue({
@@ -275,18 +220,13 @@ describe("POST /api/emails/sync/background", () => {
       resultSizeEstimate: 0,
     } as any);
 
-    setupDbMocks({ hasTags: false });
+    setupDbMocks({ insertedIds: [] });
 
-    const request = new Request("http://localhost/api/emails/sync/background", {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-
-    const response = await POST(request);
+    const response = await postSync();
     const data = await response.json();
 
     expect(data.synced).toBe(0);
-    expect(data.classified).toBe(0);
-    expect(classifyEmail).not.toHaveBeenCalled();
+    expect(classifyEmailsBatch).not.toHaveBeenCalled();
+    expect(waitUntil).not.toHaveBeenCalled();
   });
 });
