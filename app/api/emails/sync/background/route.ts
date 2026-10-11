@@ -1,12 +1,13 @@
 import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
-import { emails, emailTags, tags, userStats } from "@/db/schema";
+import { emails, userStats } from "@/db/schema";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
-import { classifyEmail, CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
+import { classifyEmailsBatch } from "@/lib/services/classify-batch";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
 import { reauthErrorResponse } from "@/lib/api/token-error";
-import { eq, and, isNull, count, sql } from "drizzle-orm";
+import { waitUntil } from "@vercel/functions";
+import { eq, and, isNull, count } from "drizzle-orm";
 
 export const POST = withAuth(async (request, user) => {
   try {
@@ -44,61 +45,27 @@ export const POST = withAuth(async (request, user) => {
       recipientCount: email.recipientCount,
     }));
 
+    // Gmail's after: filter is day-granular, so most syncs re-fetch emails we
+    // already have. Only rows actually inserted here have IDs in the DB, so only
+    // those get classified (classifying the rest would tag phantom IDs).
+    let insertedIds: string[] = [];
     if (emailRecords.length > 0) {
-      await db
+      const inserted = await db
         .insert(emails)
         .values(emailRecords)
-        .onConflictDoNothing({ target: emails.externalId });
+        .onConflictDoNothing({ target: emails.externalId })
+        .returning({ id: emails.id });
+      insertedIds = inserted.map((r) => r.id);
     }
 
-    // Auto-classify newly synced emails (parallel, errors don't block sync)
-    let classifiedCount = 0;
-    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-    if (OPENAI_API_KEY && emailRecords.length > 0) {
-      const allTags = await db.select().from(tags);
-      const tagsByName = new Map(allTags.map((t) => [t.name, t]));
-
-      const classifyResults = await Promise.allSettled(
-        emailRecords.map((record) =>
-          classifyEmail(
-            {
-              id: record.id,
-              subject: record.subject || null,
-              from: record.from,
-              to: record.to || null,
-              snippet: record.snippet || null,
-              hasUnsubscribe: record.hasUnsubscribe,
-              listId: record.listId,
-              isNoreply: record.isNoreply,
-              recipientCount: record.recipientCount,
-            },
-            OPENAI_API_KEY,
-            user.id
-          ).then((classification) => ({ record, classification }))
-        )
+    // Classify after responding so a slow LLM batch can't time out the sync
+    // and keep lastSyncedAt from advancing.
+    if (insertedIds.length > 0) {
+      waitUntil(
+        classifyEmailsBatch(user.id, insertedIds).catch((err) => {
+          console.error("Background sync classification failed:", err);
+        })
       );
-
-      for (const result of classifyResults) {
-        if (result.status !== "fulfilled") continue;
-        const { record, classification } = result.value;
-
-        if (classification.tag && classification.confidence >= CONFIDENCE_THRESHOLD) {
-          const tag = tagsByName.get(classification.tag);
-          if (tag) {
-            await db
-              .insert(emailTags)
-              .values({
-                id: crypto.randomUUID(),
-                emailId: record.id,
-                tagId: tag.id,
-                source: classification.source,
-                confidence: classification.confidence,
-              })
-              .onConflictDoNothing();
-            classifiedCount++;
-          }
-        }
-      }
     }
 
     // Get current count of unarchived emails in DB
@@ -127,7 +94,6 @@ export const POST = withAuth(async (request, user) => {
 
     return NextResponse.json({
       synced: emailRecords.length,
-      classified: classifiedCount,
       nextPageToken: result.nextPageToken,
       currentCount: currentDbCount,
       totalCount,
