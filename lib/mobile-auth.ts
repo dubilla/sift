@@ -31,8 +31,18 @@ export function mobileRedirectUri(): string {
   return process.env.MOBILE_AUTH_REDIRECT_URI || DEFAULT_REDIRECT_URI;
 }
 
+// The `sift` CLI's login listener (RFC 8252 loopback redirect). Literal IPv4
+// loopback only — not `localhost`, which can be re-pointed — on an unprivileged
+// port, with a fixed path and nothing else (no userinfo, query, or fragment).
+const CLI_LOOPBACK_REDIRECT = /^http:\/\/127\.0\.0\.1:([1-9]\d{3,4})\/callback$/;
+
+function isCliLoopbackRedirectUri(redirectUri: string): boolean {
+  const port = CLI_LOOPBACK_REDIRECT.exec(redirectUri)?.[1];
+  return port !== undefined && Number(port) >= 1024 && Number(port) <= 65535;
+}
+
 export function isAllowedMobileRedirectUri(redirectUri: string): boolean {
-  return redirectUri === mobileRedirectUri();
+  return redirectUri === mobileRedirectUri() || isCliLoopbackRedirectUri(redirectUri);
 }
 
 export function requestOrigin(request: Request): string {
