@@ -1,9 +1,10 @@
 import { db } from "@/db";
 import { emails, emailTags, tags } from "@/db/schema";
 import { classifyEmail, CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, notExists } from "drizzle-orm";
 
 const CONCURRENCY = 5;
+const BACKLOG_BATCH_SIZE = 25;
 
 export async function classifyEmailsBatch(
   userId: string,
@@ -47,7 +48,11 @@ export async function classifyEmailsBatch(
         userId
       );
 
-      if (result.tag && result.confidence >= CONFIDENCE_THRESHOLD) {
+      // Persist every successful result, even below the threshold: readers hide
+      // low-confidence tags, and the stored row marks the email as attempted so
+      // backlog catch-up doesn't pay to re-classify it. Failures (null tag)
+      // write nothing, so they get retried.
+      if (result.tag) {
         const tag = tagsByName.get(result.tag);
         if (tag) {
           await db
@@ -60,7 +65,7 @@ export async function classifyEmailsBatch(
               confidence: result.confidence,
             })
             .onConflictDoNothing();
-          classifiedCount++;
+          if (result.confidence >= CONFIDENCE_THRESHOLD) classifiedCount++;
         }
       }
     } catch (err) {
@@ -74,4 +79,38 @@ export async function classifyEmailsBatch(
   }
 
   return { classified: classifiedCount, total: toClassify.length };
+}
+
+/**
+ * Classify the newest emails that have never been classified (no email_tags
+ * row). Catches up on emails synced before auto-classification worked, or
+ * whose classification call failed.
+ */
+export async function classifyUntaggedBacklog(
+  userId: string,
+  limit = BACKLOG_BATCH_SIZE
+): Promise<{ classified: number; total: number }> {
+  const untagged = await db
+    .select({ id: emails.id })
+    .from(emails)
+    .where(
+      and(
+        eq(emails.userId, userId),
+        isNull(emails.archivedAt),
+        isNull(emails.deletedAt),
+        notExists(
+          db
+            .select({ emailId: emailTags.emailId })
+            .from(emailTags)
+            .where(eq(emailTags.emailId, emails.id))
+        )
+      )
+    )
+    .orderBy(desc(emails.date))
+    .limit(limit);
+
+  return classifyEmailsBatch(
+    userId,
+    untagged.map((e) => e.id)
+  );
 }

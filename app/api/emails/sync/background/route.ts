@@ -2,7 +2,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { db } from "@/db";
 import { emails, userStats } from "@/db/schema";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
-import { classifyEmailsBatch } from "@/lib/services/classify-batch";
+import { classifyEmailsBatch, classifyUntaggedBacklog } from "@/lib/services/classify-batch";
 import { NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/services/token";
 import { reauthErrorResponse } from "@/lib/api/token-error";
@@ -58,11 +58,17 @@ export const POST = withAuth(async (request, user) => {
       insertedIds = inserted.map((r) => r.id);
     }
 
+    const isComplete = !result.nextPageToken;
+
     // Classify after responding so a slow LLM batch can't time out the sync
-    // and keep lastSyncedAt from advancing.
-    if (insertedIds.length > 0) {
+    // and keep lastSyncedAt from advancing. New emails go first; once the sync
+    // reaches its last page, also chip away at never-classified older emails.
+    if (insertedIds.length > 0 || isComplete) {
       waitUntil(
-        classifyEmailsBatch(user.id, insertedIds).catch((err) => {
+        (async () => {
+          await classifyEmailsBatch(user.id, insertedIds);
+          if (isComplete) await classifyUntaggedBacklog(user.id);
+        })().catch((err) => {
           console.error("Background sync classification failed:", err);
         })
       );
@@ -83,7 +89,6 @@ export const POST = withAuth(async (request, user) => {
     const currentDbCount = dbCountResult[0]?.count || 0;
 
     const totalCount = statsResult[0]?.totalUnarchivedCount || 0;
-    const isComplete = !result.nextPageToken;
 
     if (isComplete && emailRecords.length > 0) {
       await db

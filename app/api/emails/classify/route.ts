@@ -2,7 +2,7 @@ import { getCurrentSession } from "@/lib/mobile-auth";
 import { db } from "@/db";
 import { emails, emailTags, tags } from "@/db/schema";
 import { classifyEmail, CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
-import { eq, and, isNull, inArray, desc, sql, notExists } from "drizzle-orm";
+import { eq, and, isNull, inArray, desc, sql, notExists, gte } from "drizzle-orm";
 
 export async function POST(request: Request) {
   try {
@@ -96,7 +96,9 @@ export async function POST(request: Request) {
               userId
             );
 
-            if (classification.tag && classification.confidence >= CONFIDENCE_THRESHOLD) {
+            // Persist below-threshold results too (hidden by readers) so the
+            // email counts as attempted and isn't re-classified.
+            if (classification.tag) {
               const tag = tagsByName.get(classification.tag);
 
               if (tag) {
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
                   })
                   .onConflictDoNothing();
 
-                classifiedCount++;
+                if (classification.confidence >= CONFIDENCE_THRESHOLD) classifiedCount++;
               }
             }
 
@@ -173,7 +175,8 @@ export async function GET(request: Request) {
         and(
           eq(emails.userId, session.user.id),
           isNull(emails.archivedAt),
-          isNull(emails.deletedAt)
+          isNull(emails.deletedAt),
+          gte(emailTags.confidence, CONFIDENCE_THRESHOLD)
         )
       )
       .groupBy(emailTags.tagId);
@@ -199,7 +202,13 @@ export async function GET(request: Request) {
       .select({ emailId: emailTags.emailId })
       .from(emailTags)
       .innerJoin(emails, eq(emailTags.emailId, emails.id))
-      .where(eq(emails.userId, session.user.id));
+      .where(
+        and(
+          eq(emails.userId, session.user.id),
+          // Low-confidence guesses are hidden, so those emails still read as unclassified
+          gte(emailTags.confidence, CONFIDENCE_THRESHOLD)
+        )
+      );
 
     const classifiedSet = new Set(classifiedEmailIds.map((r) => r.emailId));
     const unclassified = allEmailIds.filter((e) => !classifiedSet.has(e.id)).length;
