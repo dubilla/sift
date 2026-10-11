@@ -2,6 +2,7 @@ import { getCurrentSession } from "@/lib/mobile-auth";
 import { db } from "@/db";
 import { emails, emailTags, tags } from "@/db/schema";
 import { NextResponse } from "next/server";
+import { CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
 import { eq, and, isNull, gte, lte, desc, sql } from "drizzle-orm";
 
 export async function GET(request: Request) {
@@ -24,6 +25,8 @@ export async function GET(request: Request) {
       eq(emails.userId, session.user.id),
       isNull(emails.archivedAt),
       isNull(emails.deletedAt),
+      // Below-threshold tags are stored but never shown as a classification
+      gte(emailTags.confidence, CONFIDENCE_THRESHOLD),
     ];
 
     // Apply tag filter if specified
@@ -33,7 +36,6 @@ export async function GET(request: Request) {
 
     // Apply confidence filter if "needs review" is selected
     if (needsReview) {
-      conditions.push(gte(emailTags.confidence, 0.7));
       conditions.push(lte(emailTags.confidence, 0.8));
     }
 

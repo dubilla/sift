@@ -2,7 +2,8 @@ import { getCurrentSession } from "@/lib/mobile-auth";
 import { db } from "@/db";
 import { emails, emailTags, tags, classificationCorrections } from "@/db/schema";
 import { NextResponse } from "next/server";
-import { eq, and, ne, isNull } from "drizzle-orm";
+import { eq, and, ne, isNull, gte } from "drizzle-orm";
+import { CONFIDENCE_THRESHOLD } from "@/lib/services/classifier";
 import { areSimilar, extractEmailAddress, SIMILARITY_THRESHOLD } from "@/lib/services/similarity";
 
 export async function POST(
@@ -196,7 +197,11 @@ export async function POST(
         currentTagIcon: tags.icon,
       })
       .from(emails)
-      .leftJoin(emailTags, eq(emails.id, emailTags.emailId))
+      // Only join visible tags; hidden low-confidence guesses show as no tag
+      .leftJoin(
+        emailTags,
+        and(eq(emails.id, emailTags.emailId), gte(emailTags.confidence, CONFIDENCE_THRESHOLD))
+      )
       .leftJoin(tags, eq(emailTags.tagId, tags.id))
       .where(
         and(
