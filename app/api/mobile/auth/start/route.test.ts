@@ -22,6 +22,36 @@ describe("GET /api/mobile/auth/start", () => {
     );
   });
 
+  it("accepts the CLI loopback redirect", async () => {
+    const request = new Request(
+      "https://sift.example.com/api/mobile/auth/start?redirect_uri=http://127.0.0.1:53682/callback"
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(307);
+    const callbackUrl = new URL(
+      new URL(response.headers.get("location")!).searchParams.get("callbackUrl")!
+    );
+    expect(callbackUrl.searchParams.get("redirect_uri")).toBe(
+      "http://127.0.0.1:53682/callback"
+    );
+  });
+
+  it.each([
+    "http://evil.com:53682/callback",
+    "http://localhost:53682/callback",
+    "http://127.0.0.1@evil.com:53682/callback",
+  ])("rejects non-loopback redirect %s", async (redirectUri) => {
+    const request = new Request(
+      `https://sift.example.com/api/mobile/auth/start?redirect_uri=${encodeURIComponent(redirectUri)}`
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(400);
+  });
+
   it("rejects unexpected mobile redirect URIs", async () => {
     const request = new Request(
       "https://sift.example.com/api/mobile/auth/start?redirect_uri=evil://callback"

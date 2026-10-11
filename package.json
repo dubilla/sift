@@ -19,7 +19,8 @@
     "db:studio:prod": "NODE_ENV=production drizzle-kit studio",
     "db:backfill-unsubscribe": "tsx db/backfill-unsubscribe.ts",
     "db:seed-tags": "tsx db/seed-tags.ts",
-    "db:recreate-orphaned-asana-tasks": "tsx db/recreate-orphaned-asana-tasks.ts"
+    "db:recreate-orphaned-asana-tasks": "tsx db/recreate-orphaned-asana-tasks.ts",
+    "sift": "tsx cli/sift.ts"
   },
   "dependencies": {
     "@auth/core": "^0.41.0",

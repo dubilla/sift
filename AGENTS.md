@@ -41,3 +41,25 @@ Then update the dev script in `package.json`. The shape is `truncate logs/dev.lo
 The `tee` must sit on the outermost command so all wrapper + child output is captured. If a project doesn't have this set up, remind the user.
 
 <!-- END shared-doctrine -->
+
+# Diagnosing production: `sift` CLI and Vercel logs
+
+When a user reports "sync stopped", "nothing is getting tagged", or similar, check production health before reading code:
+
+```bash
+npm run sift -- login                      # once; browser sign-in, token saved to ~/.config/sift/credentials (0600)
+npm run sift -- health                     # last 24h for *your* account: last sync, emails ingested, tagged/untagged, corrections, integration tasks
+npm run sift -- health --since 7d --json   # machine-readable; --since takes 30m / 24h / 7d (max 30d)
+npm run sift -- logout                     # revokes the token server-side and deletes it locally
+```
+
+- `health` only ever shows the signed-in user's own data (`GET /api/diagnostics/health`, behind `withAuth`). It answers "is the pipeline producing results?", not "why did it fail?". Read its `warnings` first.
+- `SIFT_API_URL` picks the server (default: production). Use `SIFT_API_URL=http://localhost:3003` against `npm run dev`, or a preview deployment URL. Logins are stored per URL. Deployments behind Vercel deployment protection can't be reached; the CLI says so.
+- Exit code is non-zero when not logged in or the token is expired/revoked. Run `sift login` again.
+
+For the *why* (exceptions, stack traces, cron/sync failures), use runtime logs. `sift health` doesn't expose them:
+
+```bash
+vercel logs <deployment-url>          # stream runtime logs for a deployment
+vercel logs <deployment-url> --json   # structured, for grepping
+```
