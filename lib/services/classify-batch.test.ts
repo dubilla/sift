@@ -14,7 +14,7 @@ vi.mock("@/lib/services/classifier", () => ({
 
 import { db } from "@/db";
 import { classifyEmail } from "@/lib/services/classifier";
-import { classifyEmailsBatch } from "./classify-batch";
+import { classifyEmailsBatch, classifyUntaggedBacklog } from "./classify-batch";
 
 const dbMock = db as unknown as {
   select: ReturnType<typeof vi.fn>;
@@ -136,7 +136,7 @@ describe("classifyEmailsBatch", () => {
     );
   });
 
-  it("does not persist when confidence is below threshold", async () => {
+  it("persists below-threshold results without counting them as classified", async () => {
     queueSelect([mockEmail()], [mockTag("archivable")]);
     const { values } = setupInsert();
 
@@ -150,7 +150,9 @@ describe("classifyEmailsBatch", () => {
     const result = await classifyEmailsBatch("user-1", ["email-1"]);
 
     expect(result).toEqual({ classified: 0, total: 1 });
-    expect(values).not.toHaveBeenCalled();
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ emailId: "email-1", tagId: "tag-archivable", confidence: 0.5 })
+    );
   });
 
   it("does not persist when tag is null", async () => {
@@ -223,5 +225,61 @@ describe("classifyEmailsBatch", () => {
     expect(result).toEqual({ classified: 0, total: 0 });
     expect(classifyEmailMock).not.toHaveBeenCalled();
     expect(values).not.toHaveBeenCalled();
+  });
+});
+
+describe("classifyUntaggedBacklog", () => {
+  const ORIGINAL_KEY = process.env.OPENAI_API_KEY;
+
+  beforeEach(() => {
+    process.env.OPENAI_API_KEY = "test-key";
+    dbMock.select.mockReset();
+    dbMock.insert.mockReset();
+    classifyEmailMock.mockReset();
+  });
+
+  afterEach(() => {
+    process.env.OPENAI_API_KEY = ORIGINAL_KEY;
+  });
+
+  // Untagged query: db.select().from(emails).where(notExists(db.select()...)).orderBy().limit()
+  // The notExists subquery's db.select() runs while building the outer .where() arg.
+  function queueUntagged(rows: { id: string }[]) {
+    const limit = vi.fn().mockResolvedValue(rows);
+    dbMock.select
+      .mockReturnValueOnce({
+        from: () => ({ where: () => ({ orderBy: () => ({ limit }) }) }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({ where: () => ({}) }),
+      });
+    return { limit };
+  }
+
+  it("classifies the newest untagged emails up to the batch size", async () => {
+    const { limit } = queueUntagged([{ id: "email-1" }]);
+    queueSelect([mockEmail({ id: "email-1" })], [mockTag("archivable")]);
+    const { values } = setupInsert();
+    classifyEmailMock.mockResolvedValueOnce({
+      tag: "archivable",
+      confidence: 0.9,
+      source: "llm",
+      reason: "newsletter",
+    });
+
+    const result = await classifyUntaggedBacklog("user-1");
+
+    expect(limit).toHaveBeenCalledWith(25);
+    expect(result).toEqual({ classified: 1, total: 1 });
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ emailId: "email-1" }));
+  });
+
+  it("does nothing when there is no backlog", async () => {
+    queueUntagged([]);
+
+    const result = await classifyUntaggedBacklog("user-1");
+
+    expect(result).toEqual({ classified: 0, total: 0 });
+    expect(classifyEmailMock).not.toHaveBeenCalled();
   });
 });

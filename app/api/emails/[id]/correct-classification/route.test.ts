@@ -47,6 +47,11 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...args) => ({ type: "and", args })),
   ne: vi.fn((col, val) => ({ type: "ne", col, val })),
   isNull: vi.fn((col) => ({ type: "isNull", col })),
+  gte: vi.fn((col, val) => ({ type: "gte", col, val })),
+}));
+
+vi.mock("@/lib/services/classifier", () => ({
+  CONFIDENCE_THRESHOLD: 0.7,
 }));
 
 vi.mock("@/lib/services/similarity", () => ({

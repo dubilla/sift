@@ -28,6 +28,7 @@ vi.mock("@/lib/services/token", () => ({
 
 vi.mock("@/lib/services/classify-batch", () => ({
   classifyEmailsBatch: vi.fn(),
+  classifyUntaggedBacklog: vi.fn(),
 }));
 
 vi.mock("@vercel/functions", () => ({
@@ -45,7 +46,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { getUnarchivedEmails } from "@/lib/services/gmail";
 import { getValidAccessToken } from "@/lib/services/token";
-import { classifyEmailsBatch } from "@/lib/services/classify-batch";
+import { classifyEmailsBatch, classifyUntaggedBacklog } from "@/lib/services/classify-batch";
 import { waitUntil } from "@vercel/functions";
 
 const mockSession = { user: { id: "user-123" } };
@@ -68,7 +69,7 @@ const mockGmailEmail = {
 // The route calls db in this order:
 // 1. db.select().from(userStats).where() -> stats
 // 2. db.insert(emails).values().onConflictDoNothing().returning() -> inserted IDs
-// 3. waitUntil(classifyEmailsBatch(userId, insertedIds)) -> after response
+// 3. waitUntil(classifyEmailsBatch(insertedIds), then classifyUntaggedBacklog on the last page)
 // 4. db.select({count}).from(emails).where() -> count
 // 5. db.update(userStats).set().where() -> update lastSyncedAt (if complete)
 
@@ -211,7 +212,34 @@ describe("POST /api/emails/sync/background", () => {
     consoleError.mockRestore();
   });
 
-  it("skips classification when nothing new was inserted", async () => {
+  it("catches up on the untagged backlog after new emails on the last page", async () => {
+    vi.mocked(auth).mockResolvedValue(mockSession as any);
+    vi.mocked(getValidAccessToken).mockResolvedValue("token");
+    vi.mocked(getUnarchivedEmails).mockResolvedValue({
+      emails: [mockGmailEmail],
+      nextPageToken: undefined,
+      resultSizeEstimate: 1,
+    } as any);
+    const order: string[] = [];
+    vi.mocked(classifyEmailsBatch).mockImplementation(async () => {
+      order.push("inserted");
+      return { classified: 1, total: 1 };
+    });
+    vi.mocked(classifyUntaggedBacklog).mockImplementation(async () => {
+      order.push("backlog");
+      return { classified: 0, total: 0 };
+    });
+
+    setupDbMocks({ insertedIds: ["email-1"] });
+
+    await postSync();
+    await vi.mocked(waitUntil).mock.calls[0][0];
+
+    expect(order).toEqual(["inserted", "backlog"]);
+    expect(classifyUntaggedBacklog).toHaveBeenCalledWith("user-123");
+  });
+
+  it("runs backlog catch-up on a no-op sync", async () => {
     vi.mocked(auth).mockResolvedValue(mockSession as any);
     vi.mocked(getValidAccessToken).mockResolvedValue("token");
     vi.mocked(getUnarchivedEmails).mockResolvedValue({
@@ -219,14 +247,33 @@ describe("POST /api/emails/sync/background", () => {
       nextPageToken: undefined,
       resultSizeEstimate: 0,
     } as any);
+    vi.mocked(classifyEmailsBatch).mockResolvedValue({ classified: 0, total: 0 });
+    vi.mocked(classifyUntaggedBacklog).mockResolvedValue({ classified: 0, total: 0 });
 
     setupDbMocks({ insertedIds: [] });
 
     const response = await postSync();
     const data = await response.json();
+    await vi.mocked(waitUntil).mock.calls[0][0];
 
     expect(data.synced).toBe(0);
-    expect(classifyEmailsBatch).not.toHaveBeenCalled();
+    expect(classifyUntaggedBacklog).toHaveBeenCalledWith("user-123");
+  });
+
+  it("skips classification on a mid-sync page with nothing new", async () => {
+    vi.mocked(auth).mockResolvedValue(mockSession as any);
+    vi.mocked(getValidAccessToken).mockResolvedValue("token");
+    vi.mocked(getUnarchivedEmails).mockResolvedValue({
+      emails: [mockGmailEmail],
+      nextPageToken: "next-page",
+      resultSizeEstimate: 1,
+    } as any);
+
+    setupDbMocks({ insertedIds: [] });
+
+    await postSync();
+
     expect(waitUntil).not.toHaveBeenCalled();
+    expect(classifyUntaggedBacklog).not.toHaveBeenCalled();
   });
 });

@@ -54,6 +54,7 @@ vi.mock("drizzle-orm", () => ({
   inArray: vi.fn((col, vals) => ({ type: "inArray", col, vals })),
   desc: vi.fn((col) => ({ type: "desc", col })),
   notExists: vi.fn((subquery) => ({ type: "notExists", subquery })),
+  gte: vi.fn((col, val) => ({ type: "gte", col, val })),
   sql: Object.assign(
     vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ type: "sql", strings, values })),
     { raw: vi.fn((s: string) => s) }
@@ -61,6 +62,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 import { auth } from "@/auth";
+import { gte } from "drizzle-orm";
 import { db } from "@/db";
 import { classifyEmail } from "@/lib/services/classifier";
 
@@ -125,7 +127,7 @@ function mockSelectChains({
   const mockValues = vi.fn(() => ({ onConflictDoNothing: mockOnConflictDoNothing }));
   vi.mocked(db.insert).mockReturnValue({ values: mockValues } as any);
 
-  return { mockOnConflictDoNothing };
+  return { mockOnConflictDoNothing, mockValues };
 }
 
 describe("POST /api/emails/classify", () => {
@@ -203,11 +205,11 @@ describe("POST /api/emails/classify", () => {
     expect(doneEvent!.total).toBe(1);
   });
 
-  it("classified count only increments when confidence meets threshold", async () => {
+  it("persists below-threshold results but only counts confident ones as classified", async () => {
     vi.mocked(auth).mockResolvedValue({ user: { id: "user123" } } as any);
 
     const lowConfidenceEmail = { ...MOCK_EMAIL, id: "email-2" };
-    mockSelectChains({ emailsToClassify: [MOCK_EMAIL, lowConfidenceEmail] }); // DB returns both, notExists applied at DB level
+    const { mockValues } = mockSelectChains({ emailsToClassify: [MOCK_EMAIL, lowConfidenceEmail] }); // DB returns both, notExists applied at DB level
 
     vi.mocked(classifyEmail)
       .mockResolvedValueOnce({ tag: "newsletter", confidence: 0.9, source: "ai" } as any) // above threshold
@@ -229,6 +231,12 @@ describe("POST /api/emails/classify", () => {
     const doneEvent = events.find((e) => e.type === "done");
     expect(doneEvent!.classified).toBe(1);
     expect(doneEvent!.total).toBe(2);
+
+    // The low-confidence result is stored (hidden by readers) so it isn't retried
+    expect(mockValues).toHaveBeenCalledTimes(2);
+    expect(mockValues).toHaveBeenLastCalledWith(
+      expect.objectContaining({ emailId: "email-2", confidence: 0.3 })
+    );
   });
 
   it("streams done with 0 when no unclassified emails exist", async () => {
@@ -351,5 +359,9 @@ describe("GET /api/emails/classify", () => {
     expect(data.tags[0].count).toBe(5);
     expect(data.unclassified).toBe(2); // 3 total - 1 classified
     expect(data.total).toBe(3);
+
+    // Hidden low-confidence tags must not count toward tag counts or "classified"
+    expect(gte).toHaveBeenCalledTimes(2);
+    expect(gte).toHaveBeenCalledWith("confidence", 0.7);
   });
 });
