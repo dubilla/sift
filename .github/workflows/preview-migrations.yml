@@ -63,13 +63,31 @@ jobs:
               -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
               -H "Content-Type: application/json" \
               "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches" \
-              -d "{\"branch\": {\"name\": \"${BRANCH_NAME}\"}}")
+              -d "{\"branch\": {\"name\": \"${BRANCH_NAME}\"}, \"endpoints\": [{\"type\": \"read_write\"}]}")
             BRANCH_ID=$(echo "$CREATE_RESPONSE" | jq -r '.branch.id')
             if [ -z "$BRANCH_ID" ] || [ "$BRANCH_ID" = "null" ]; then
               echo "Failed to create Neon branch: $CREATE_RESPONSE"
               exit 1
             fi
             echo "Created branch ${BRANCH_NAME} with ID ${BRANCH_ID}"
+          fi
+
+          # Branches created before endpoints were requested have no compute to connect to
+          ENDPOINT_COUNT=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
+            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches/${BRANCH_ID}/endpoints" \
+            | jq '.endpoints | length')
+          if [ "$ENDPOINT_COUNT" = "0" ]; then
+            echo "Adding compute endpoint to ${BRANCH_NAME}..."
+            ENDPOINT_RESPONSE=$(curl -s -X POST \
+              -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/endpoints" \
+              -d "{\"endpoint\": {\"branch_id\": \"${BRANCH_ID}\", \"type\": \"read_write\"}}")
+            if ! echo "$ENDPOINT_RESPONSE" | jq -e '.endpoint.id' > /dev/null; then
+              echo "Failed to create Neon endpoint: $(echo "$ENDPOINT_RESPONSE" | jq -r '.message // .')"
+              exit 1
+            fi
           fi
 
           CONNECTION=$(curl -s \
