@@ -158,6 +158,12 @@ export const emails = pgTable(
       table.deletedAt,
       table.date
     ),
+    // Optimizes the latest-email-per-thread lookup in GET /api/threads
+    userThreadDateIdx: index("idx_emails_user_thread_date").on(
+      table.userId,
+      table.threadId,
+      table.date
+    ),
   })
 );
 
