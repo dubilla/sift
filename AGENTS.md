@@ -50,6 +50,10 @@ When a user reports "sync stopped", "nothing is getting tagged", or similar, che
 npm run sift -- login                      # once; browser sign-in, token saved to ~/.config/sift/credentials (0600)
 npm run sift -- health                     # last 24h for *your* account: last sync, emails ingested, tagged/untagged, corrections, integration tasks
 npm run sift -- health --since 7d --json   # machine-readable; --since takes 30m / 24h / 7d (max 30d)
+npm run sift -- emails                     # recent emails (last 24h): id, date, inbox/archived/deleted, tags, linked tasks; no subject/from/snippet
+npm run sift -- emails --untagged --since 7d --limit 100 --json   # why isn't this getting tagged? (also --archived | --deleted, max --limit 200)
+npm run sift -- email <id>                 # one email (Sift id or Gmail message id): tags w/ source+confidence, corrections, activity log, integration tasks
+npm run sift -- email <id> --show-content --json   # opt in to subject/from/snippet/task names; content is omitted by default, only ask for it when you need it
 npm run sift -- logout                     # revokes the token server-side and deletes it locally
 ```
 
