@@ -15,7 +15,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "100");
-    const offset = (page - 1) * limit;
+    // An explicit offset lets clients that removed rows locally (e.g. archived them)
+    // resume from what they still hold instead of skipping past shifted rows.
+    const offsetParam = parseInt(searchParams.get("offset") ?? "");
+    const offset = Number.isInteger(offsetParam) && offsetParam >= 0 ? offsetParam : (page - 1) * limit;
     const tagFilter = searchParams.get("tag"); // Filter by tag name
     const userId = session.user.id;
 
