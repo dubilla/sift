@@ -168,7 +168,12 @@ export async function GET(request: Request) {
     const allTags = await db.select().from(tags);
 
     const tagCountResults = await db
-      .select({ tagId: emailTags.tagId, count: sql<number>`count(*)` })
+      .select({
+        tagId: emailTags.tagId,
+        count: sql<number>`count(*)`,
+        // Distinct threads, matching how /api/threads?tag= lists them (null thread ids are skipped)
+        threadCount: sql<number>`count(distinct ${emails.threadId})`,
+      })
       .from(emailTags)
       .innerJoin(emails, eq(emailTags.emailId, emails.id))
       .where(
@@ -181,10 +186,13 @@ export async function GET(request: Request) {
       )
       .groupBy(emailTags.tagId);
 
-    const tagCountById = new Map(tagCountResults.map((r) => [r.tagId, Number(r.count)]));
+    const tagCountById = new Map(tagCountResults.map((r) => [r.tagId, r]));
     const tagCounts: Record<string, number> = {};
+    const tagThreadCounts: Record<string, number> = {};
     for (const tag of allTags) {
-      tagCounts[tag.name] = tagCountById.get(tag.id) ?? 0;
+      const result = tagCountById.get(tag.id);
+      tagCounts[tag.name] = Number(result?.count ?? 0);
+      tagThreadCounts[tag.name] = Number(result?.threadCount ?? 0);
     }
 
     const allEmailIds = await db
@@ -222,6 +230,7 @@ export async function GET(request: Request) {
           color: t.color,
           icon: t.icon,
           count: tagCounts[t.name] || 0,
+          threadCount: tagThreadCounts[t.name] || 0,
         })),
         unclassified,
         total: allEmailIds.length,

@@ -314,7 +314,7 @@ describe("GET /api/emails/classify", () => {
     vi.mocked(auth).mockResolvedValue({ user: { id: "user123" } } as any);
 
     const allTags = [MOCK_TAG];
-    const tagCountResults = [{ tagId: "tag-1", count: 5 }];
+    const tagCountResults = [{ tagId: "tag-1", count: 5, threadCount: "3" }];
     const allEmailIds = [{ id: "email-1" }, { id: "email-2" }, { id: "email-3" }];
     const classifiedEmailIds = [{ emailId: "email-1" }];
 
@@ -357,6 +357,7 @@ describe("GET /api/emails/classify", () => {
     expect(data.tags).toHaveLength(1);
     expect(data.tags[0].name).toBe("newsletter");
     expect(data.tags[0].count).toBe(5);
+    expect(data.tags[0].threadCount).toBe(3); // Postgres returns count() as a string
     expect(data.unclassified).toBe(2); // 3 total - 1 classified
     expect(data.total).toBe(3);
 
