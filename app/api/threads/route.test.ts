@@ -98,6 +98,26 @@ describe("GET /api/threads", () => {
     expect(params).toEqual(expect.arrayContaining([20, 40]));
   });
 
+  it("prefers an explicit offset over the page-derived one", async () => {
+    signIn();
+    vi.mocked(db.execute).mockResolvedValue([] as any);
+
+    await GET(new Request("http://localhost/api/threads?page=3&limit=20&offset=17"));
+
+    const { params } = executedQuery();
+    expect(params).toEqual(expect.arrayContaining([20, 17]));
+    expect(params).not.toContain(40); // page-derived offset is ignored
+  });
+
+  it("ignores an invalid offset", async () => {
+    signIn();
+    vi.mocked(db.execute).mockResolvedValue([] as any);
+
+    await GET(new Request("http://localhost/api/threads?page=3&limit=20&offset=-5"));
+
+    expect(executedQuery().params).toEqual(expect.arrayContaining([20, 40]));
+  });
+
   it("reports hasMore when a full page is returned", async () => {
     signIn();
     const fullPage = Array.from({ length: 2 }, (_, i) => ({ threadId: `t-${i}` }));
