@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useDefaultDueDate } from "@/lib/hooks/useDefaultDueDate";
 
 interface CreateCrewTaskModalProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ export default function CreateCrewTaskModal({
 }: CreateCrewTaskModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useDefaultDueDate(isOpen);
   const [assignee, setAssignee] = useState<"user" | "agent">("user");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);

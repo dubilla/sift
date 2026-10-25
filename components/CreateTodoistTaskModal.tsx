@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useDefaultDueDate } from "@/lib/hooks/useDefaultDueDate";
 
 interface TodoistProject {
   id: string;
@@ -31,7 +32,7 @@ export default function CreateTodoistTaskModal({
 }: CreateTodoistTaskModalProps) {
   const [taskName, setTaskName] = useState("");
   const [description, setDescription] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useDefaultDueDate(isOpen);
   const [projects, setProjects] = useState<TodoistProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);

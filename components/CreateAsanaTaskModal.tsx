@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useDefaultDueDate } from "@/lib/hooks/useDefaultDueDate";
 
 interface Workspace {
   gid: string;
@@ -38,7 +39,7 @@ export default function CreateAsanaTaskModal({
 }: CreateAsanaTaskModalProps) {
   const [taskName, setTaskName] = useState("");
   const [notes, setNotes] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useDefaultDueDate(isOpen);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState<string>("");
