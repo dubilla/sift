@@ -8,6 +8,7 @@ describe("todayLocalDate", () => {
 
   it("uses local date for a late evening that is the next day in UTC", () => {
     const evening = new Date(2026, 9, 25, 23, 30);
+    expect(evening.toISOString().slice(0, 10)).toBe("2026-10-26");
     expect(todayLocalDate(evening)).toBe("2026-10-25");
   });
 
